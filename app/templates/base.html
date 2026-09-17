@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Python 练习乐园{% endblock %}</title>
+  <!-- Tailwind CSS（CDN，可爱粉彩主题） -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            candy: { 50:'#fff5f7', 100:'#ffe4ec', 200:'#ffc9d8', 300:'#ffa3bc',
+                     400:'#ff7a9c', 500:'#f9527a', 600:'#e6365f' },
+            sky2:  { 400:'#7dd3fc', 500:'#38bdf8' },
+            cream: '#fff8f0',
+          },
+          fontFamily: { rounded: ['"Comic Sans MS"','"Nunito"','system-ui','sans-serif'] },
+          borderRadius: { '4xl':'2rem' },
+        }
+      }
+    }
+  </script>
+  <!-- canvas-confetti：彩屑/烟花核心库（自托管，避免 CDN ORB 拦截） -->
+  <script src="/static/lib/canvas-confetti.min.js"></script>
+  <!-- Alpine.js：轻量交互 -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="font-rounded bg-gradient-to-br from-candy-50 via-sky-50 to-candy-100 min-h-screen text-slate-700">
+  <!-- 顶部导航 -->
+  <nav class="sticky top-0 z-40 backdrop-blur-md bg-white/70 border-b-4 border-candy-200 shadow-lg">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <a href="/" class="flex items-center gap-2 group">
+        <span class="text-3xl group-hover:animate-bounce">🐍</span>
+        <span class="text-xl font-extrabold text-candy-500">Python 练习乐园</span>
+      </a>
+      <div class="flex items-center gap-3 text-sm font-bold">
+        {% if user %}
+          <span class="px-3 py-1 rounded-full bg-candy-100 text-candy-600">
+            {{ user.username }}
+            <span class="ml-1 text-xs opacity-70">{{ '👩‍🏫 老师' if user.role.value == 'teacher' else '🎒 学生' }}</span>
+          </span>
+          {% if user.role.value == 'teacher' %}
+            <a href="/teacher" class="hover:text-candy-500 transition">教师中心</a>
+          {% else %}
+            <a href="/student" class="hover:text-candy-500 transition">学生中心</a>
+          {% endif %}
+          <form method="post" action="/logout" class="inline">
+            <button class="px-3 py-1 rounded-full bg-candy-200 text-candy-600 hover:bg-candy-300 transition">退出</button>
+          </form>
+        {% else %}
+          <a href="/login" class="px-3 py-1 rounded-full bg-candy-100 text-candy-600 hover:bg-candy-200 transition">登录</a>
+          <a href="/register" class="px-3 py-1 rounded-full bg-candy-400 text-white hover:bg-candy-500 transition">注册</a>
+        {% endif %}
+      </div>
+    </div>
+  </nav>
+
+  <!-- 主内容 -->
+  <main class="max-w-6xl mx-auto px-4 py-8">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="text-center text-xs text-slate-400 py-6">
+    用 ❤️ 与 🐍 打造 · Python 练习乐园
+  </footer>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

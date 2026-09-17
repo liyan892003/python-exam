@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block title %}排行榜 - {{ cls.name }}{% endblock %}
+{% block content %}
+<div class="mb-6">
+  <a href="{% if user.role.value == 'teacher' %}/teacher/classes/{{ cls.id }}{% else %}/student/classes/{{ cls.id }}{% endif %}" class="text-sm text-slate-400 hover:text-candy-400">← 返回</a>
+  <h1 class="text-3xl font-extrabold text-candy-500 mt-2 text-center">🏆 {{ cls.name }} 排行榜 🏆</h1>
+  <p class="text-center text-slate-400 text-sm mt-1">{{ n_students }} 位同学参与</p>
+</div>
+
+{% if set_obj and set_score %}
+<!-- 刚做完一套试卷的总分横幅：Top3 与其他文案不同 -->
+<div class="mb-8 bg-gradient-to-br {{ 'from-candy-100 via-yellow-50 to-yellow-100' if my_rank and my_rank <= 3 else 'from-sky-100 via-purple-50 to-candy-50' }} rounded-4xl p-6 text-center border-4 border-dashed {{ 'border-candy-200' if my_rank and my_rank <= 3 else 'border-sky-200' }} animate-pop">
+  <div class="text-5xl mb-2 {{ 'animate-float-trophy' if my_rank and my_rank <= 3 else '' }}">
+    {% if my_rank and my_rank <= 3 %}🎉{% elif my_rank %}👏{% else %}✨{% endif %}
+  </div>
+  <h2 class="text-xl font-extrabold text-slate-500 mb-1">
+    {% if my_rank and my_rank <= 3 %}
+      你是第 <span class="text-candy-500">{{ my_rank }}</span> 名！🏆
+    {% elif my_rank %}
+      你完成了「{{ set_obj.name }}」，第 <span class="text-sky-500">{{ my_rank }}</span> 名
+    {% else %}
+      你完成了「{{ set_obj.name }}」
+    {% endif %}
+  </h2>
+  <p class="text-slate-500 mb-3">
+    这套题得了
+    <span class="text-4xl font-extrabold {{ 'text-candy-500' if my_rank and my_rank <= 3 else 'text-sky-500' }} animate-pop">{{ set_score.score }}</span>
+    分 ·
+    <span class="text-green-500 font-bold">{{ set_score.correct }}/{{ set_score.total }}</span> 道正确
+  </p>
+  {% if my_rank and my_rank > 3 %}
+  <p class="text-sm text-slate-400 mb-3">💪 继续努力！下次冲进 Top3 解锁满屏撒花</p>
+  {% endif %}
+  <a href="/student/classes/{{ cls.id }}/sets/{{ set_obj.id }}/review"
+     class="inline-block px-6 py-3 rounded-4xl {{ 'bg-candy-400 text-white' if my_rank and my_rank <= 3 else 'bg-sky-400 text-white' }} font-bold shadow-lg hover:scale-105 transition transform">
+    📝 查看每题解析
+  </a>
+</div>
+{% endif %}
+
+{% if ranking %}
+  <!-- Top3 颁奖台 -->
+  {% set top3 = ranking[:3] %}
+  {% set init_fn = 'podiumAnim()' if my_rank and my_rank <= 3 else ('encourageAnim()' if my_rank else '') %}
+  <div class="flex items-end justify-center gap-2 md:gap-4 mb-8" id="podium" x-data="{}" x-init="{{ init_fn }}">
+    {# 第2名在左，第1名居中最高，第3名在右 #}
+    {% for r in top3 %}
+    {% set is_first = r.rank == 1 %}
+    <div class="text-center {{ 'order-2' if r.rank == 1 else ('order-1' if r.rank == 2 else 'order-3') }}">
+      <div class="mb-2 {{ 'animate-float-trophy' if is_first else 'animate-pop' }}">
+        <div class="text-6xl md:text-7xl {{ 'animate-float-trophy' if is_first else '' }}">
+          {{ '🏆' if r.rank == 1 else ('🥈' if r.rank == 2 else '🥉') }}
+        </div>
+      </div>
+      <div class="font-extrabold {{ 'text-candy-500 text-lg' if is_first else 'text-slate-600' }}">{{ r.username }}</div>
+      <div class="text-2xl font-extrabold {{ 'text-candy-500' if is_first else 'text-slate-500' }}">{{ r.score }}</div>
+      <div class="text-xs text-slate-400">分</div>
+      <div class="mt-2 rounded-t-3xl {{ 'bg-gradient-to-t from-yellow-300 to-yellow-100 h-32' if is_first else ('bg-gradient-to-t from-slate-300 to-slate-100 h-24' if r.rank == 2 else 'bg-gradient-to-t from-orange-300 to-orange-100 h-20') }} flex items-start justify-center pt-2 font-extrabold text-white text-xl">
+        {{ r.rank }}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- 第 4 名及以后 -->
+  {% if ranking|length > 3 %}
+  <div class="bg-white/85 rounded-4xl p-4 shadow-md space-y-2">
+    {% for r in ranking[3:] %}
+    <div class="flex items-center gap-4 p-3 rounded-2xl {{ 'bg-candy-50 ring-2 ring-candy-200' if r.user_id == my_id else 'bg-slate-50' }}">
+      <span class="w-8 text-center font-extrabold text-slate-400">{{ r.rank }}</span>
+      <span class="text-2xl">⭐</span>
+      <span class="flex-1 font-bold {{ 'text-candy-500' if r.user_id == my_id else 'text-slate-600' }}">
+        {{ r.username }}{{ '（你）' if r.user_id == my_id else '' }}
+      </span>
+      <span class="text-sm text-slate-400">{{ r.answered }} 题</span>
+      <span class="text-lg font-extrabold text-candy-500">{{ r.score }} 分</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+{% else %}
+<div class="text-center py-16 bg-white/60 rounded-4xl">
+  <div class="text-6xl mb-4">🎮</div>
+  <p class="text-slate-400">还没有人答题，快来抢第一名！</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function randomInRange(min, max) {
+  return Math.random() * (max - min) + min;
+}
+
+function podiumAnim() {
+  if (!window.confetti) return;
+  // —— 糖果色 + 星星/圆形混合 ——
+  const COLORS = ['#ff7a9c', '#f9527a', '#fbbf24', '#7dd3fc', '#a78bfa', '#34d399', '#ffc9d8'];
+  const SHAPES = ['star', 'circle'];
+
+  // 1) 立即来一波大爆发（中心 + 两侧）
+  setTimeout(() => {
+    // 中心大爆发
+    confetti({ particleCount: 200, spread: 360, startVelocity: 45, origin: { x: 0.5, y: 0.55 },
+               shapes: SHAPES, colors: COLORS, zIndex: 9999 });
+    // 左上爆发
+    confetti({ particleCount: 120, angle: 60, spread: 90, startVelocity: 50, origin: { x: 0, y: 0.6 },
+               shapes: SHAPES, colors: COLORS });
+    // 右上爆发
+    confetti({ particleCount: 120, angle: 120, spread: 90, startVelocity: 50, origin: { x: 1, y: 0.6 },
+               shapes: SHAPES, colors: COLORS });
+  }, 400);
+
+  // 2) 持续 8 秒的两侧彩炮（像派对礼炮持续撒花）
+  setTimeout(() => {
+    const duration = 8000;
+    const end = Date.now() + duration;
+    (function frame() {
+      // 左下彩炮：向右上 45°
+      confetti({ particleCount: 8, angle: 60, spread: 70, startVelocity: 55,
+                 origin: { x: 0, y: 0.85 }, shapes: SHAPES, colors: COLORS, zIndex: 9999 });
+      // 右下彩炮：向左上 45°
+      confetti({ particleCount: 8, angle: 120, spread: 70, startVelocity: 55,
+                 origin: { x: 1, y: 0.85 }, shapes: SHAPES, colors: COLORS, zIndex: 9999 });
+      // 顶部撒彩带（满屏下落）
+      confetti({ particleCount: 5, angle: 90, spread: 120, startVelocity: 30,
+                 origin: { x: randomInRange(0.05, 0.95), y: 0 },
+                 gravity: 1.4, ticks: 300, scalar: 1.2,
+                 shapes: SHAPES, colors: COLORS, zIndex: 9999 });
+      // 偶尔放一颗大星星从天而降
+      if (Math.random() < 0.15) {
+        confetti({ particleCount: 1, startVelocity: 0, ticks: 400, gravity: 0.6, scalar: 2.5,
+                   origin: { x: randomInRange(0.1, 0.9), y: 0 },
+                   shapes: ['star'], colors: COLORS, zIndex: 9999 });
+      }
+      if (Date.now() < end) requestAnimationFrame(frame);
+    })();
+  }, 700);
+
+  // 3) 最后再来一次大爆发（收尾礼花）
+  setTimeout(() => {
+    confetti({ particleCount: 150, spread: 360, startVelocity: 40, origin: { x: 0.5, y: 0.5 },
+               shapes: SHAPES, colors: COLORS, zIndex: 9999 });
+    confetti({ particleCount: 80, spread: 160, startVelocity: 55, origin: { x: 0, y: 0.4 },
+               shapes: SHAPES, colors: COLORS });
+    confetti({ particleCount: 80, spread: 160, startVelocity: 55, origin: { x: 1, y: 0.4 },
+               shapes: SHAPES, colors: COLORS });
+  }, 7500);
+}
+window.podiumAnim = podiumAnim;
+
+// —— 鼓励动画：第 4 名及以后用 ——
+function encourageAnim() {
+  if (!window.confetti) return;
+  // 鼓掌配色：暖色调 + 一点蓝
+  const COLORS = ['#7dd3fc', '#a78bfa', '#fbbf24', '#ffc9d8', '#f9527a'];
+  // 1) 中心一次小撒花（10 个彩屑，温柔一点）
+  setTimeout(() => {
+    confetti({ particleCount: 60, spread: 100, startVelocity: 30,
+               origin: { x: 0.5, y: 0.6 }, shapes: ['circle'],
+               colors: COLORS, zIndex: 9999, scalar: 0.9 });
+  }, 400);
+  // 2) 顶部撒一些缓慢下落的小彩屑（4 秒）
+  setTimeout(() => {
+    const end = Date.now() + 4000;
+    (function frame() {
+      confetti({ particleCount: 3, angle: 90, spread: 120, startVelocity: 15,
+                 origin: { x: randomInRange(0.1, 0.9), y: 0 },
+                 gravity: 1.2, ticks: 200, scalar: 0.8,
+                 shapes: ['circle'], colors: COLORS, zIndex: 9999 });
+      if (Date.now() < end) requestAnimationFrame(frame);
+    })();
+  }, 600);
+  // 3) 飘动的 👏 emoji（持续 5 秒）
+  const applause = document.createElement('div');
+  applause.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9998;overflow:hidden';
+  document.body.appendChild(applause);
+  const endT = Date.now() + 5000;
+  (function spawnClap() {
+    if (Date.now() > endT) { applause.remove(); return; }
+    const el = document.createElement('div');
+    el.textContent = '👏';
+    const startX = randomInRange(5, 95);
+    const size = randomInRange(28, 56);
+    el.style.cssText = `position:absolute;left:${startX}vw;top:100vh;font-size:${size}px;opacity:0.85;` +
+                       `transition:transform 2.4s ease-out,opacity 2.4s ease-out;` +
+                       `transform:translateY(0) rotate(0deg)`;
+    applause.appendChild(el);
+    requestAnimationFrame(() => {
+      el.style.transform = `translateY(-${randomInRange(70, 110)}vh) rotate(${randomInRange(-180,180)}deg)`;
+      el.style.opacity = '0';
+    });
+    setTimeout(() => el.remove(), 2500);
+    setTimeout(spawnClap, randomInRange(180, 320));
+  })();
+}
+window.encourageAnim = encourageAnim;
+</script>
+{% endblock %}

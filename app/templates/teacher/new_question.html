@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}出题{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto">
+  <div class="bg-white/85 rounded-4xl p-8 shadow-xl">
+    <div class="text-center mb-6">
+      <div class="text-5xl mb-2">📝</div>
+      <h1 class="text-3xl font-extrabold text-candy-500">为「{{ set.name }}」出题</h1>
+      <p class="text-xs text-slate-400 mt-1">{{ cls.name }} · 第 {{ questions|length + 1 if questions is defined else '' }} 题</p>
+    </div>
+
+    {% if error %}
+      <div class="bg-red-50 border-2 border-red-200 text-red-500 px-4 py-3 rounded-2xl mb-4 text-sm font-bold animate-shake">⚠️ {{ error }}</div>
+    {% endif %}
+    {% if ai_message %}
+      <div class="bg-green-50 border-2 border-green-200 text-green-600 px-4 py-3 rounded-2xl mb-4 text-sm font-bold animate-pop">{{ ai_message }}</div>
+    {% endif %}
+
+    <!-- AI 出题区 -->
+    <div class="bg-gradient-to-br from-purple-50 to-candy-50 rounded-4xl p-5 mb-6 border-4 border-dashed border-purple-200">
+      <h2 class="font-extrabold text-purple-500 mb-2 flex items-center gap-2">🤖 AI 一键出题</h2>
+      <p class="text-xs text-slate-400 mb-3">DeepSeek 自动生成 Python 练习题并入库到这套试卷，省时省力</p>
+      <div class="flex gap-3">
+        <form method="post" action="/teacher/classes/{{ cls.id }}/sets/{{ set.id }}/questions/ai-generate" class="flex-1">
+          <input type="hidden" name="ai_type" value="mc">
+          <button class="w-full py-2 rounded-2xl bg-purple-400 text-white font-bold hover:bg-purple-500 hover:scale-[1.02] transition transform">✨ AI 生成选择题</button>
+        </form>
+        <form method="post" action="/teacher/classes/{{ cls.id }}/sets/{{ set.id }}/questions/ai-generate" class="flex-1">
+          <input type="hidden" name="ai_type" value="tf">
+          <button class="w-full py-2 rounded-2xl bg-sky2-400 text-white font-bold hover:bg-sky2-500 hover:scale-[1.02] transition transform">✨ AI 生成判断题</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="text-center text-slate-300 text-sm mb-6">—— 或手动录入 ——</div>
+
+    <!-- 手动出题 -->
+    <form method="post" action="/teacher/classes/{{ cls.id }}/sets/{{ set.id }}/questions" class="space-y-4" id="qform">
+      <div>
+        <label class="block text-sm font-bold text-slate-500 mb-1">题型</label>
+        <select name="q_type" id="qtype" class="w-full px-4 py-3 rounded-2xl border-2 border-candy-100 focus:border-candy-400 outline-none transition bg-candy-50/50" onchange="toggleQType()">
+          <option value="mc">选择题（4 选 1）</option>
+          <option value="tf">判断题（对/错）</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-bold text-slate-500 mb-1">题干</label>
+        <textarea name="stem" rows="3" required
+                  class="w-full px-4 py-3 rounded-2xl border-2 border-candy-100 focus:border-candy-400 outline-none transition bg-candy-50/50"
+                  placeholder="如：以下哪个是 Python 的列表数据类型？"></textarea>
+      </div>
+      <div>
+        <label class="block text-sm font-bold text-slate-500 mb-1">答案解析（选填）</label>
+        <textarea name="explanation" rows="2"
+                  class="w-full px-4 py-3 rounded-2xl border-2 border-candy-100 focus:border-candy-400 outline-none transition bg-candy-50/50"
+                  placeholder="解释为什么是这个答案"></textarea>
+      </div>
+
+      <!-- 选择题选项 -->
+      <div id="mc-options">
+        <label class="block text-sm font-bold text-slate-500 mb-2">选项（勾选唯一正确项）</label>
+        <div class="space-y-2" id="choices">
+          {% for i in range(4) %}
+          <div class="flex items-center gap-3">
+            <input type="checkbox" name="choice_correct" value="{{ i }}" class="w-5 h-5 accent-candy-400">
+            <input type="text" name="choice_texts" class="flex-1 px-4 py-2 rounded-xl border-2 border-candy-100 focus:border-candy-400 outline-none transition bg-candy-50/50" placeholder="选项 {{ ['A','B','C','D'][i] }}">
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- 判断题选项 -->
+      <div id="tf-options" class="hidden">
+        <label class="block text-sm font-bold text-slate-500 mb-2">正确答案是？</label>
+        <select name="tf_correct" class="w-full px-4 py-3 rounded-2xl border-2 border-candy-100 focus:border-candy-400 outline-none transition bg-candy-50/50">
+          <option value="true">对 ✅</option>
+          <option value="false">错 ❌</option>
+        </select>
+      </div>
+
+      <button class="w-full py-3 rounded-2xl bg-candy-400 text-white font-bold text-lg shadow-lg hover:bg-candy-500 hover:scale-[1.02] transition transform">
+        保存并继续下一题 🎯
+      </button>
+    </form>
+    <a href="/teacher/classes/{{ cls.id }}/sets/{{ set.id }}" class="block text-center text-sm text-slate-400 mt-4 hover:text-candy-400">← 返回试卷</a>
+  </div>
+</div>
+
+<script>
+function toggleQType() {
+  const t = document.getElementById('qtype').value;
+  document.getElementById('mc-options').classList.toggle('hidden', t !== 'mc');
+  document.getElementById('tf-options').classList.toggle('hidden', t !== 'tf');
+}
+toggleQType();
+</script>
+{% endblock %}

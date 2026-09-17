@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}登录{% endblock %}
+{% block content %}
+<div class="max-w-md mx-auto">
+  <div class="bg-white/85 rounded-4xl p-8 shadow-xl">
+    <div class="text-center mb-6">
+      <div class="text-5xl mb-2">👋</div>
+      <h1 class="text-3xl font-extrabold text-candy-500">欢迎回来</h1>
+    </div>
+    {% if error %}
+      <div class="bg-red-50 border-2 border-red-200 text-red-500 px-4 py-3 rounded-2xl mb-4 text-sm font-bold animate-shake">⚠️ {{ error }}</div>
+    {% endif %}
+    <form method="post" action="/login" class="space-y-4">
+      <div>
+        <label class="block text-sm font-bold text-slate-500 mb-1">学号 / 工号</label>
+        <input type="text" name="email" required inputmode="numeric"
+               class="w-full px-4 py-3 rounded-2xl border-2 border-candy-100 focus:border-candy-400 outline-none transition bg-candy-50/50"
+               placeholder="如：20231001">
+      </div>
+      <div>
+        <label class="block text-sm font-bold text-slate-500 mb-1">密码</label>
+        <input type="password" name="password" required
+               class="w-full px-4 py-3 rounded-2xl border-2 border-candy-100 focus:border-candy-400 outline-none transition bg-candy-50/50"
+               placeholder="你的密码">
+      </div>
+      <button class="w-full py-3 rounded-2xl bg-candy-400 text-white font-bold text-lg shadow-lg hover:bg-candy-500 hover:scale-[1.02] transition transform">
+        登录 🌟
+      </button>
+    </form>
+    <p class="text-center text-sm text-slate-400 mt-4">还没账号？<a href="/register" class="text-candy-500 font-bold">去注册</a></p>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Python 练习乐园 🐍{% endblock %}
+{% block content %}
+<div class="text-center py-12">
+  <div class="text-8xl mb-4 animate-bounce">🐍✨</div>
+  <h1 class="text-5xl font-extrabold text-candy-500 mb-3">Python 练习乐园</h1>
+  <p class="text-lg text-slate-500 mb-8">老师轻松出题 · 学生快乐答题 · 班级排行榜比拼 🏆</p>
+  <div class="flex gap-4 justify-center">
+    <a href="/register" class="px-8 py-4 rounded-4xl bg-candy-400 text-white text-xl font-bold shadow-lg hover:scale-105 hover:bg-candy-500 transition transform">立即注册 🚀</a>
+    <a href="/login" class="px-8 py-4 rounded-4xl bg-white text-candy-500 text-xl font-bold shadow-lg hover:scale-105 transition transform border-4 border-candy-200">已有账号，登录</a>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-16">
+    <div class="bg-white/80 rounded-4xl p-6 shadow-lg hover:rotate-1 transition transform">
+      <div class="text-5xl mb-3">👩‍🏫</div>
+      <h3 class="font-bold text-candy-500 text-xl mb-2">老师出题</h3>
+      <p class="text-slate-500 text-sm">手动录入或 AI 一键生成选择题 / 判断题</p>
+    </div>
+    <div class="bg-white/80 rounded-4xl p-6 shadow-lg hover:-rotate-1 transition transform">
+      <div class="text-5xl mb-3">🎮</div>
+      <h3 class="font-bold text-candy-500 text-xl mb-2">趣味答题</h3>
+      <p class="text-slate-500 text-sm">即时反馈，答对彩屑飞舞，答错温和提示</p>
+    </div>
+    <div class="bg-white/80 rounded-4xl p-6 shadow-lg hover:rotate-1 transition transform">
+      <div class="text-5xl mb-3">🏆</div>
+      <h3 class="font-bold text-candy-500 text-xl mb-2">班级排行</h3>
+      <p class="text-slate-500 text-sm">第一名大奖杯 + 烟花，Top3 颁奖台</p>
+    </div>
+  </div>
+</div>
+{% endblock %}

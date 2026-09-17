@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}题库 - {{ set.name }}{% endblock %}
+{% block content %}
+<div class="mb-6">
+  <a href="/teacher/classes/{{ cls.id }}/sets/{{ set.id }}" class="text-sm text-slate-400 hover:text-candy-400">← 返回试卷</a>
+  <h1 class="text-3xl font-extrabold text-candy-500 mt-2">📚 题库</h1>
+  <p class="text-slate-400 text-sm mt-1">你历史创建的所有题目。点「加入本试卷」会复制一道题到「{{ set.name }}」（原题不变）。</p>
+</div>
+
+{% if rows %}
+<div class="space-y-3">
+  {% for r in rows %}
+  <div class="bg-white/85 rounded-4xl p-5 shadow-md flex items-start justify-between gap-4">
+    <div class="flex-1 min-w-0">
+      <div class="flex flex-wrap items-center gap-2 mb-1">
+        <span class="text-xs font-bold px-2 py-0.5 rounded-full {{ 'bg-candy-100 text-candy-500' if r.q.q_type.value == 'mc' else 'bg-sky-100 text-sky2-500' }}">
+          {{ '选择题' if r.q.q_type.value == 'mc' else '判断题' }}
+        </span>
+        <span class="text-xs font-bold px-2 py-0.5 rounded-full {{ 'bg-purple-100 text-purple-500' if r.q.source.value == 'ai' else 'bg-slate-100 text-slate-500' }}">
+          {{ '🤖 AI' if r.q.source.value == 'ai' else '✍️ 手动' }}
+        </span>
+        <span class="text-xs text-slate-400">{{ r.q.points }} 分 · {{ r.n_choices }} 个选项</span>
+        {% if r.from_class %}
+        <span class="text-xs text-slate-400">来自 <span class="font-bold text-slate-500">{{ r.from_class.name }}</span>{% if r.from_set %} / {{ r.from_set.name }}{% endif %}</span>
+        {% endif %}
+      </div>
+      <p class="font-bold text-slate-700 mb-2">{{ r.q.stem }}</p>
+      <div class="text-sm text-slate-500 space-y-1">
+        {% for c in r.q.choices %}
+        <div class="{{ 'text-green-500 font-bold' if c.is_correct else '' }}">
+          {{ '✅' if c.is_correct else '◯' }} {{ c.text }}
+        </div>
+        {% endfor %}
+      </div>
+      {% if r.q.explanation %}
+      <p class="mt-2 text-xs text-slate-400 italic">💡 {{ r.q.explanation }}</p>
+      {% endif %}
+    </div>
+    <form method="post" action="/teacher/classes/{{ cls.id }}/sets/{{ set.id }}/bank/{{ r.q.id }}/add"
+          class="shrink-0">
+      <button class="px-3 py-2 rounded-xl bg-green-50 text-green-500 text-sm font-bold hover:bg-green-100 transition whitespace-nowrap">➕ 加入本试卷</button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-16 bg-white/60 rounded-4xl">
+  <div class="text-6xl mb-4">📭</div>
+  <p class="text-slate-400">题库是空的——或者所有历史题目都已经在「{{ set.name }}」里了。</p>
+  <p class="text-slate-400 text-sm mt-2">先去出几道题，下次建新试卷就能从这里一键加入。</p>
+  <a href="/teacher/classes/{{ cls.id }}/sets/{{ set.id }}/questions/new"
+     class="inline-block mt-4 px-5 py-3 rounded-4xl bg-candy-400 text-white font-bold shadow-lg hover:bg-candy-500 hover:scale-105 transition transform">➕ 出第一题</a>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}创建班级{% endblock %}
+{% block content %}
+<div class="max-w-lg mx-auto">
+  <div class="bg-white/85 rounded-4xl p-8 shadow-xl">
+    <div class="text-center mb-6">
+      <div class="text-5xl mb-2">🏫</div>
+      <h1 class="text-3xl font-extrabold text-candy-500">创建新班级</h1>
+      <p class="text-slate-400 text-sm">建班后会自动生成 6 位邀请码，学生凭码加入</p>
+    </div>
+    {% if error %}
+      <div class="bg-red-50 border-2 border-red-200 text-red-500 px-4 py-3 rounded-2xl mb-4 text-sm font-bold animate-shake">⚠️ {{ error }}</div>
+    {% endif %}
+    <form method="post" action="/teacher/classes/new" class="space-y-4">
+      <div>
+        <label class="block text-sm font-bold text-slate-500 mb-1">班级名称</label>
+        <input type="text" name="name" required
+               class="w-full px-4 py-3 rounded-2xl border-2 border-candy-100 focus:border-candy-400 outline-none transition bg-candy-50/50"
+               placeholder="如：Python 基础 A 班">
+      </div>
+      <div>
+        <label class="block text-sm font-bold text-slate-500 mb-1">班级简介（选填）</label>
+        <textarea name="description" rows="3"
+                  class="w-full px-4 py-3 rounded-2xl border-2 border-candy-100 focus:border-candy-400 outline-none transition bg-candy-50/50"
+                  placeholder="讲讲这个班练什么…"></textarea>
+      </div>
+      <button class="w-full py-3 rounded-2xl bg-candy-400 text-white font-bold text-lg shadow-lg hover:bg-candy-500 hover:scale-[1.02] transition transform">
+        创建 🎉
+      </button>
+    </form>
+    <a href="/teacher" class="block text-center text-sm text-slate-400 mt-4 hover:text-candy-400">← 返回班级列表</a>
+  </div>
+</div>
+{% endblock %}

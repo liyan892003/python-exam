@@ -1,0 +1,35 @@
+# Render Blueprint：一键创建「网站 + Postgres 数据库」
+# 文档: https://render.com/docs/blueprint-spec
+# 费用: Web 用 free（$0），数据库用 basic_256mb（约 $7/月，数据永久不过期）
+# 区域选新加坡（singapore），国内访问延迟最低；网站和数据库必须同区域才能内网连通
+databases:
+  - name: python-exam-db
+    plan: basic_256mb          # 付费入门档，避免 free 档 30 天过期删数据
+    region: singapore
+    databaseName: python_exam
+    user: python_exam
+
+services:
+  - type: web
+    name: python-exam
+    runtime: python
+    plan: free                 # 15 分钟无流量休眠，上课前访问一次即可唤醒
+    region: singapore
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: prod
+      - key: PYTHON_VERSION
+        value: 3.11.5
+      - key: SECRET_KEY
+        generateValue: true     # Render 自动生成强随机密钥
+      - key: DATABASE_URL
+        fromDatabase:
+          name: python-exam-db
+          property: connectionString   # 内网连接串，自动注入
+      - key: DEEPSEEK_API_KEY
+        sync: false              # 部署后在 Dashboard 手动填（AI 出题用）
+      - key: DEEPSEEK_MODEL
+        value: deepseek-chat

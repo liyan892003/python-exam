@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}学生管理 - {{ cls.name }}{% endblock %}
+{% block content %}
+<div class="mb-6">
+  <a href="/teacher/classes/{{ cls.id }}" class="text-sm text-slate-400 hover:text-candy-400">← 返回班级</a>
+  <h1 class="text-3xl font-extrabold text-candy-500 mt-2">🎒 {{ cls.name }} · 学生管理</h1>
+  <p class="text-slate-400 text-sm mt-1">共 {{ rows|length }} 位学生。点「📋 详情」查看单生答题记录；移除学生将删除其答题记录并从排行榜消失。</p>
+</div>
+
+<div class="flex flex-wrap gap-3 mb-4">
+  <a href="/teacher/classes/{{ cls.id }}/students/export"
+     class="px-5 py-3 rounded-4xl bg-green-100 text-green-600 font-bold shadow hover:bg-green-200 hover:scale-105 transition transform">
+    📥 导出全班汇总 CSV
+  </a>
+  <a href="/classes/{{ cls.id }}/leaderboard" class="px-5 py-3 rounded-4xl bg-sky-100 text-sky-700 font-bold hover:bg-sky-200 transition">🏆 看排行榜</a>
+</div>
+
+{% if rows %}
+<div class="bg-white/85 rounded-4xl p-2 shadow-md space-y-1">
+  <div class="hidden md:grid grid-cols-12 gap-2 px-3 py-2 text-xs font-bold text-slate-400 uppercase">
+    <div class="col-span-1">排名</div>
+    <div class="col-span-3">学号</div>
+    <div class="col-span-2">昵称</div>
+    <div class="col-span-2">已答</div>
+    <div class="col-span-2">总分</div>
+    <div class="col-span-2">操作</div>
+  </div>
+  {% for r in rows %}
+  <div class="grid grid-cols-12 gap-2 px-3 py-3 rounded-2xl items-center {{ 'bg-candy-50' if r.rank and r.rank <= 3 else 'bg-slate-50' }}">
+    <div class="col-span-2 md:col-span-1 text-center">
+      {% if r.rank %}
+        <span class="inline-block w-8 h-8 leading-8 rounded-full font-extrabold text-sm
+                     {{ 'bg-yellow-200 text-yellow-700' if r.rank == 1 else ('bg-slate-200 text-slate-700' if r.rank == 2 else 'bg-orange-200 text-orange-700' if r.rank == 3 else 'bg-slate-100 text-slate-500') }}">
+          {{ r.rank }}
+        </span>
+      {% else %}
+        <span class="text-slate-300 text-sm">—</span>
+      {% endif %}
+    </div>
+    <div class="col-span-4 md:col-span-3 font-mono text-sm text-slate-600 truncate">{{ r.user.email }}</div>
+    <div class="col-span-3 md:col-span-2 font-bold text-slate-700 truncate">{{ r.user.username }}</div>
+    <div class="col-span-2 md:col-span-2 text-sm text-slate-500">{{ r.answered }} 题</div>
+    <div class="col-span-2 md:col-span-2 text-lg font-extrabold text-candy-500">{{ r.score }} 分</div>
+    <div class="col-span-12 md:col-span-2 flex gap-1 justify-end">
+      <a href="/teacher/classes/{{ cls.id }}/students/{{ r.user.id }}"
+         class="px-2 py-1 rounded-xl bg-candy-100 text-candy-500 text-xs font-bold hover:bg-candy-200 transition">📋 详情</a>
+      <form method="post" action="/teacher/classes/{{ cls.id }}/students/{{ r.user.id }}/remove"
+            onsubmit="return confirm('确定移除「{{ r.user.username }}」？\n该学生在本班的所有答题记录将被删除，排行榜将不再显示该学生。');">
+        <button class="px-2 py-1 rounded-xl bg-red-50 text-red-400 text-xs font-bold hover:bg-red-100 transition">🗑️ 移除</button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-16 bg-white/60 rounded-4xl">
+  <div class="text-6xl mb-4">👥</div>
+  <p class="text-slate-400">这个班还没有学生加入，把邀请码 <span class="font-mono font-bold text-candy-500">{{ cls.join_code }}</span> 发给学生吧</p>
+</div>
+{% endif %}
+{% endblock %}

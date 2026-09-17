@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}{{ cls.name }}{% endblock %}
+{% block content %}
+<div class="mb-6">
+  <a href="/student" class="text-sm text-slate-400 hover:text-candy-400">← 返回</a>
+  <h1 class="text-3xl font-extrabold text-candy-500 mt-2">{{ cls.name }}</h1>
+  <p class="text-slate-400 text-sm">{{ cls.description or '暂无描述' }}</p>
+</div>
+
+<div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+  <h2 class="text-2xl font-extrabold text-slate-600">📑 试卷列表</h2>
+  <div class="flex gap-2">
+    <a href="/student/classes/{{ cls.id }}/my-answers" class="px-4 py-2 rounded-4xl bg-candy-100 text-candy-500 font-bold text-sm hover:bg-candy-200 transition">📝 我的答题</a>
+    <a href="/classes/{{ cls.id }}/leaderboard" class="px-4 py-2 rounded-4xl bg-sky-100 text-sky2-500 font-bold text-sm hover:bg-sky-200 transition">🏆 排行榜</a>
+  </div>
+</div>
+
+{% if items %}
+<div class="space-y-3">
+  {% for it in items %}
+  <div class="bg-white/85 rounded-4xl p-5 shadow-md flex items-center gap-4 hover:scale-[1.01] transition transform">
+    <div class="shrink-0 w-14 h-14 rounded-full flex items-center justify-center text-3xl
+      {{ 'bg-green-100' if it.is_complete else ('bg-candy-100' if not it.not_started else 'bg-slate-100') }}">
+      {{ '✅' if it.is_complete else ('🎯' if not it.not_started else '📄') }}
+    </div>
+    <div class="flex-1 min-w-0">
+      <h3 class="text-lg font-extrabold text-slate-700 truncate">{{ it.set.name }}</h3>
+      <p class="text-xs text-slate-400">{{ it.set.description or '暂无说明' }}</p>
+      <div class="flex items-center gap-3 mt-1 text-xs font-bold">
+        <span class="text-sky2-500">📊 {{ it.n_done }}/{{ it.n_total }} 题</span>
+        <span class="text-candy-500">⭐ {{ it.score }} 分</span>
+        {% if it.n_total > 0 %}
+        <span class="text-slate-400">{{ (it.n_done / it.n_total * 100) | int }}%</span>
+        {% endif %}
+      </div>
+      {% if it.n_total > 0 %}
+      <div class="mt-2 h-2 bg-candy-50 rounded-full overflow-hidden">
+        <div class="h-full bg-gradient-to-r from-candy-300 to-candy-500 transition-all"
+             style="width: {{ (it.n_done / it.n_total * 100) | int }}%"></div>
+      </div>
+      {% endif %}
+    </div>
+    <a href="/student/classes/{{ cls.id }}/sets/{{ it.set.id }}/start"
+       class="shrink-0 px-5 py-3 rounded-2xl font-bold text-sm whitespace-nowrap transition
+       {{ 'bg-sky-100 text-sky2-500 hover:bg-sky-200' if it.is_complete else ('bg-candy-400 text-white hover:bg-candy-500 hover:scale-105') }}">
+      {{ '🏆 看排行' if it.is_complete else ('继续答题' if not it.not_started else '开始答题') }}
+    </a>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-12 bg-white/60 rounded-4xl">
+  <div class="text-5xl mb-3">⏳</div>
+  <p class="text-slate-400">老师还没发试卷，等等吧～</p>
+</div>
+{% endif %}
+{% endblock %}

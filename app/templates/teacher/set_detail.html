@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}{{ set.name }} - {{ cls.name }}{% endblock %}
+{% block content %}
+<div class="mb-6">
+  <a href="/teacher/classes/{{ cls.id }}" class="text-sm text-slate-400 hover:text-candy-400">← 返回班级</a>
+  <div class="flex items-center justify-between mt-2 gap-4">
+    <div>
+      <h1 class="text-3xl font-extrabold text-candy-500">📑 {{ set.name }}</h1>
+      <p class="text-slate-400 text-sm">{{ set.description or '暂无说明' }}</p>
+    </div>
+    <a href="/teacher/classes/{{ cls.id }}/sets/{{ set.id }}/questions/new"
+       class="px-5 py-3 rounded-4xl bg-candy-400 text-white font-bold shadow-lg hover:bg-candy-500 hover:scale-105 transition transform whitespace-nowrap">➕ 出题</a>
+    <a href="/teacher/classes/{{ cls.id }}/sets/{{ set.id }}/bank"
+       class="px-5 py-3 rounded-4xl bg-green-100 text-green-600 font-bold shadow hover:bg-green-200 hover:scale-105 transition transform whitespace-nowrap">📚 从题库添加</a>
+  </div>
+</div>
+
+<div class="flex items-center justify-between mb-4">
+  <h2 class="text-2xl font-extrabold text-slate-600">📝 题目（{{ questions|length }}）</h2>
+  <form method="post" action="/teacher/classes/{{ cls.id }}/sets/{{ set.id }}/delete"
+        onsubmit="return confirm('删除整张试卷会连带删除所有题目与学生作答，确定？');">
+    <button class="px-3 py-2 rounded-xl bg-red-50 text-red-400 text-sm font-bold hover:bg-red-100 transition">🗑️ 删除试卷</button>
+  </form>
+</div>
+
+{% if questions %}
+<div class="space-y-3">
+  {% for q in questions %}
+  <div class="bg-white/85 rounded-4xl p-5 shadow-md flex items-start justify-between gap-4">
+    <div class="flex-1">
+      <div class="flex items-center gap-2 mb-1">
+        <span class="text-xs font-bold px-2 py-0.5 rounded-full {{ 'bg-candy-100 text-candy-500' if q.q_type.value == 'mc' else 'bg-sky-100 text-sky2-500' }}">
+          {{ '选择题' if q.q_type.value == 'mc' else '判断题' }}
+        </span>
+        <span class="text-xs font-bold px-2 py-0.5 rounded-full {{ 'bg-purple-100 text-purple-500' if q.source.value == 'ai' else 'bg-slate-100 text-slate-500' }}">
+          {{ '🤖 AI' if q.source.value == 'ai' else '✍️ 手动' }}
+        </span>
+        <span class="text-xs text-slate-400">{{ q.points }} 分</span>
+      </div>
+      <p class="font-bold text-slate-700">{{ loop.index }}. {{ q.stem }}</p>
+      <div class="mt-2 text-sm text-slate-500 space-y-1">
+        {% for c in q.choices %}
+        <div class="{{ 'text-green-500 font-bold' if c.is_correct else '' }}">
+          {{ '✅' if c.is_correct else '◯' }} {{ c.text }}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    <form method="post" action="/teacher/classes/{{ cls.id }}/questions/{{ q.id }}/delete"
+          onsubmit="return confirm('确定删除该题？');" class="shrink-0">
+      <button class="px-3 py-1 rounded-xl bg-red-50 text-red-400 text-sm hover:bg-red-100 transition">🗑️</button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-12 bg-white/60 rounded-4xl">
+  <div class="text-5xl mb-3">📝</div>
+  <p class="text-slate-400 mb-4">这套试卷还没题，点右上角出题吧！</p>
+  <a href="/teacher/classes/{{ cls.id }}/sets/{{ set.id }}/questions/new"
+     class="inline-block px-5 py-3 rounded-4xl bg-candy-400 text-white font-bold shadow-lg hover:bg-candy-500 hover:scale-105 transition transform">➕ 出第一题</a>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,48 @@
+/* Python 练习乐园 — 可爱游戏化动画 */
+
+/* 答错抖动 */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-8px) rotate(-2deg); }
+  20%, 40%, 60%, 80% { transform: translateX(8px) rotate(2deg); }
+}
+.animate-shake { animation: shake 0.6s cubic-bezier(.36,.07,.19,.97) both; }
+
+/* 答对弹跳 */
+@keyframes pop {
+  0% { transform: scale(0.5); opacity: 0; }
+  60% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); }
+}
+.animate-pop { animation: pop 0.5s cubic-bezier(.34,1.56,.64,1) both; }
+
+/* 奖杯漂浮 */
+@keyframes float-trophy {
+  0%, 100% { transform: translateY(0) rotate(-3deg); }
+  50% { transform: translateY(-14px) rotate(3deg); }
+}
+.animate-float-trophy { animation: float-trophy 2.5s ease-in-out infinite; }
+
+/* 奖牌闪光 */
+@keyframes shimmer-medal {
+  0%, 100% { filter: brightness(1) drop-shadow(0 0 0 transparent); }
+  50% { filter: brightness(1.3) drop-shadow(0 0 12px gold); }
+}
+.animate-shimmer { animation: shimmer-medal 2s ease-in-out infinite; }
+
+/* 滚动条可爱化 */
+::-webkit-scrollbar { width: 10px; }
+::-webkit-scrollbar-track { background: #fff5f7; }
+::-webkit-scrollbar-thumb { background: #ffc9d8; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #ffa3bc; }
+
+/* 平滑过渡 */
+* { transition-timing-function: cubic-bezier(.34,1.56,.64,1); }
+
+/* 行截断 */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

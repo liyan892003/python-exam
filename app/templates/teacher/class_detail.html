@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}{{ cls.name }}{% endblock %}
+{% block content %}
+<div class="mb-6">
+  <a href="/teacher" class="text-sm text-slate-400 hover:text-candy-400">← 返回</a>
+  <div class="flex items-center justify-between mt-2">
+    <div>
+      <h1 class="text-3xl font-extrabold text-candy-500">{{ cls.name }}</h1>
+      <p class="text-slate-400 text-sm">{{ cls.description or '暂无描述' }}</p>
+    </div>
+    <div class="text-center bg-candy-50 rounded-4xl p-4 border-4 border-dashed border-candy-200">
+      <div class="text-xs text-slate-400 mb-1">邀请码</div>
+      <div class="text-3xl font-mono font-extrabold text-candy-500 tracking-widest">{{ cls.join_code }}</div>
+      <div class="text-xs text-slate-400 mt-1">把这码发给学生 📨</div>
+    </div>
+  </div>
+</div>
+
+<!-- 新建试卷 -->
+<div class="bg-white/85 rounded-4xl p-6 shadow-md mb-6 border-4 border-dashed border-candy-200">
+  <h2 class="text-xl font-extrabold text-candy-500 mb-3 flex items-center gap-2">📑 新建一套试卷</h2>
+  <p class="text-xs text-slate-400 mb-3">比如「第 2 节课」「循环练习」等，每套试卷包含多道题，学生选一套顺序作答。</p>
+  <form method="post" action="/teacher/classes/{{ cls.id }}/sets" class="flex flex-col sm:flex-row gap-3">
+    <input type="text" name="name" required placeholder="试卷名称，如：第 2 节课"
+           class="flex-1 px-4 py-3 rounded-2xl border-2 border-candy-100 focus:border-candy-400 outline-none transition bg-candy-50/50">
+    <input type="text" name="description" placeholder="选填：试卷说明"
+           class="flex-1 px-4 py-3 rounded-2xl border-2 border-candy-100 focus:border-candy-400 outline-none transition bg-candy-50/50">
+    <button class="px-6 py-3 rounded-2xl bg-candy-400 text-white font-bold shadow-lg hover:bg-candy-500 hover:scale-105 transition transform whitespace-nowrap">➕ 建试卷</button>
+  </form>
+</div>
+
+<div class="flex items-center justify-between mb-4">
+  <h2 class="text-2xl font-extrabold text-slate-600">📚 试卷列表（{{ set_stats|length }}）</h2>
+  <a href="/classes/{{ cls.id }}/leaderboard" class="px-4 py-2 rounded-4xl bg-sky-100 text-sky2-500 font-bold text-sm hover:bg-sky-200 transition">🏆 排行榜</a>
+</div>
+
+{% if set_stats %}
+<div class="space-y-3">
+  {% for s in set_stats %}
+  <a href="/teacher/classes/{{ cls.id }}/sets/{{ s.set.id }}"
+     class="block bg-white/85 rounded-4xl p-5 shadow-md hover:scale-[1.01] transition transform">
+    <div class="flex items-center justify-between gap-4">
+      <div class="flex-1">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="text-2xl">📑</span>
+          <h3 class="text-lg font-extrabold text-slate-700">{{ s.set.name }}</h3>
+        </div>
+        <p class="text-xs text-slate-400 ml-8">{{ s.set.description or '暂无说明' }}</p>
+      </div>
+      <div class="text-right shrink-0">
+        <div class="text-2xl font-extrabold text-candy-500">{{ s.n_questions }}</div>
+        <div class="text-xs text-slate-400">道题</div>
+      </div>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-12 bg-white/60 rounded-4xl">
+  <div class="text-5xl mb-3">📄</div>
+  <p class="text-slate-400">还没有试卷，用上面的表单建一套吧！</p>
+</div>
+{% endif %}
+
+{% if students %}
+<div class="mt-8 flex items-center justify-between">
+  <h2 class="text-2xl font-extrabold text-slate-600">🎒 班级学生（{{ students|length }}）</h2>
+  <a href="/teacher/classes/{{ cls.id }}/students"
+     class="px-4 py-2 rounded-4xl bg-candy-100 text-candy-600 font-bold text-sm hover:bg-candy-200 transition">
+    👥 学生管理 →
+  </a>
+</div>
+<div class="mt-3 flex flex-wrap gap-2">
+  {% for s in students %}
+  <span class="px-3 py-1 rounded-full bg-candy-50 border-2 border-candy-100 text-sm font-bold text-slate-600">{{ s.username }}</span>
+  {% endfor %}
+</div>
+{% else %}
+<div class="mt-8 text-center py-8 bg-white/60 rounded-4xl">
+  <div class="text-4xl mb-2">👥</div>
+  <p class="text-slate-400 mb-3">还没有学生加入，把邀请码发出去吧</p>
+  <a href="/teacher/classes/{{ cls.id }}/students"
+     class="inline-block px-4 py-2 rounded-4xl bg-candy-100 text-candy-600 font-bold text-sm hover:bg-candy-200 transition">👥 学生管理 →</a>
+</div>
+{% endif %}
+{% endblock %}

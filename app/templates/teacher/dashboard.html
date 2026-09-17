@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}教师中心{% endblock %}
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-3xl font-extrabold text-candy-500">👩‍🏫 我的班级</h1>
+  <a href="/teacher/classes/new" class="px-5 py-3 rounded-4xl bg-candy-400 text-white font-bold shadow-lg hover:bg-candy-500 hover:scale-105 transition transform">➕ 创建新班级</a>
+</div>
+
+{% if stats %}
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+  {% for s in stats %}
+  <a href="/teacher/classes/{{ s.class.id }}" class="block bg-white/85 rounded-4xl p-6 shadow-lg hover:scale-[1.03] hover:-rotate-1 transition transform">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="text-xl font-extrabold text-slate-700">{{ s.class.name }}</h3>
+      <span class="text-xs font-mono bg-candy-100 text-candy-500 px-2 py-1 rounded-full">码：{{ s.class.join_code }}</span>
+    </div>
+    <p class="text-sm text-slate-400 mb-4 line-clamp-2">{{ s.class.description or '暂无描述' }}</p>
+    <div class="flex gap-4 text-sm font-bold">
+      <span class="text-sky2-500">📚 {{ s.n_questions }} 题</span>
+      <span class="text-candy-400">🎒 {{ s.n_students }} 学生</span>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-16 bg-white/60 rounded-4xl">
+  <div class="text-6xl mb-4">📭</div>
+  <p class="text-slate-400 mb-4">还没有班级，快创建第一个吧！</p>
+  <a href="/teacher/classes/new" class="inline-block px-6 py-3 rounded-4xl bg-candy-400 text-white font-bold shadow-lg hover:bg-candy-500 hover:scale-105 transition transform">➕ 创建班级</a>
+</div>
+{% endif %}
+{% endblock %}
