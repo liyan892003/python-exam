@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}知识地图 - {{ cls.name }}{% endblock %}
+{% block content %}
+<div x-data="{}" {% if request.query_params.get('celebrate') %}x-init="grandMasterAnim()"{% endif %}>
+  <div class="mb-6">
+    <a href="/student/classes/{{ cls.id }}" class="text-sm text-slate-400 hover:text-candy-400">← 返回班级</a>
+    <h1 class="text-3xl font-extrabold text-candy-500 mt-2 text-center">🗺️ Python 知识地图</h1>
+    <p class="text-center text-slate-400 text-sm mt-1">做练习题自动集星，每个知识点 3 颗星，集满有惊喜 🎉</p>
+  </div>
+
+  {% if total_leaf == 0 %}
+  <div class="text-center py-16 bg-white/60 rounded-4xl">
+    <div class="text-6xl mb-4">🗺️</div>
+    <p class="text-slate-400">老师还没搭建知识点地图，等等吧～</p>
+  </div>
+  {% else %}
+  <!-- 总进度 -->
+  <div class="bg-white/85 rounded-4xl p-5 shadow-md mb-8 max-w-2xl mx-auto">
+    <div class="flex items-end justify-between mb-2">
+      <span class="font-extrabold text-slate-600">⭐ 星星进度</span>
+      <span class="font-extrabold text-candy-500 text-xl">{{ total_stars }}<span class="text-slate-400 text-sm">/{{ max_stars }}</span>
+        <span class="text-sm text-slate-400 ml-2">{{ pct }}%</span>
+      </span>
+    </div>
+    <div class="h-5 bg-candy-50 rounded-full overflow-hidden ring-2 ring-candy-100">
+      <div class="h-full bg-gradient-to-r from-yellow-300 via-candy-400 to-purple-400 rounded-full transition-all duration-700"
+           style="width: {{ pct }}%"></div>
+    </div>
+    <p class="text-[11px] text-slate-300 mt-2 text-center">每个知识点 3 颗星：⭐ 练过 2 题 · ⭐⭐ 答对 3 题 · ⭐⭐⭐ 答对 5 题</p>
+  </div>
+
+  <!-- 章节路径 -->
+  <div class="space-y-6">
+    {% set ns = namespace(global_i=0) %}
+    {% for blk in view %}
+    <div class="bg-white/85 rounded-4xl p-6 shadow-md">
+      <div class="flex items-center gap-3 mb-5">
+        <span class="text-3xl">{{ blk.chapter.emoji }}</span>
+        <div class="flex-1">
+          <h2 class="text-lg font-extrabold text-slate-700">{{ blk.chapter.name }}</h2>
+          <span class="text-xs font-bold {{ 'text-amber-500' if blk.n_stars == blk.nodes|length * 3 and blk.nodes|length else 'text-slate-400' }}">
+            ⭐ {{ blk.n_stars }}/{{ blk.nodes|length * 3 }}
+            {% if blk.nodes|length and blk.n_stars == blk.nodes|length * 3 %} 🌟 本章满星{% endif %}
+          </span>
+        </div>
+      </div>
+      <div class="flex flex-wrap gap-x-2 gap-y-5">
+        {% for n in blk.nodes %}
+        <a href="/student/classes/{{ cls.id }}/knowledge/{{ n.kp.id }}"
+           class="group flex flex-col items-center w-24 text-center kp-node {{ 'animate-pop' if request.query_params.get('celebrate') else '' }}"
+           style="{% if request.query_params.get('celebrate') %}animation-delay: {{ ns.global_i * 90 }}ms{% endif %}">
+          <span class="relative w-16 h-16 rounded-full flex items-center justify-center text-3xl transition transform group-hover:scale-110
+            {% if n.stars == 3 %}bg-gradient-to-br from-yellow-200 via-candy-300 to-purple-300 shadow-[0_0_18px_rgba(249,82,122,0.55)] ring-4 ring-yellow-200
+            {% elif n.stars > 0 %}bg-amber-50 ring-4 ring-amber-200
+            {% else %}bg-slate-100 ring-4 ring-slate-200 grayscale opacity-70 group-hover:opacity-100{% endif %}">
+            {{ n.kp.emoji }}
+            {% if n.stars == 3 %}<span class="absolute -top-1 -right-1 text-lg">🌟</span>{% endif %}
+          </span>
+          <span class="mt-2 text-xs font-bold {{ 'text-candy-500' if n.stars == 3 else 'text-slate-500' }} leading-tight">{{ n.kp.name }}</span>
+          <span class="mt-0.5 text-[11px] tracking-tight">
+            {% for i in range(3) %}{{ '⭐' if i < n.stars else '☆' }}{% endfor %}
+          </span>
+          {% if n.n_q > 0 %}
+          <span class="text-[10px] text-slate-400">✓{{ n.n_correct }}/{{ n.n_q }}{% if n.n_attempted == 0 %} · 待练习{% endif %}</span>
+          {% else %}
+          <span class="text-[10px] text-slate-300">暂无题</span>
+          {% endif %}
+        </a>
+        {% set ns.global_i = ns.global_i + 1 %}
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- 全部点亮庆祝遮罩 -->
+  {% if request.query_params.get('celebrate') %}
+  <div id="master-overlay"
+       class="fixed inset-0 z-[9998] flex flex-col items-center justify-center bg-purple-900/30 backdrop-blur-sm pointer-events-none">
+    <div class="text-8xl md:text-9xl animate-float-trophy mb-4">🏆</div>
+    <div class="bg-white/95 rounded-4xl px-10 py-8 text-center shadow-2xl border-4 border-yellow-300 animate-pop">
+      <h2 class="text-3xl md:text-4xl font-extrabold bg-gradient-to-r from-candy-500 via-yellow-500 to-purple-500 bg-clip-text text-transparent">
+        满星达成！
+      </h2>
+      <p class="text-lg font-bold text-slate-600 mt-2">你已成为 <span class="text-candy-500">Python 大师</span> 🌟🐍</p>
+      <p class="text-sm text-slate-400 mt-1">{{ total_leaf }} 个知识点全部 ⭐⭐⭐，太厉害了！</p>
+    </div>
+  </div>
+  <script>
+  // 5 秒后自动收起遮罩（撒花继续）
+  setTimeout(() => { const o = document.getElementById('master-overlay'); if (o) o.style.display = 'none'; }, 5200);
+  </script>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function randomInRange(min, max) { return Math.random() * (max - min) + min; }
+
+function grandMasterAnim() {
+  if (!window.confetti) return;
+  const COLORS = ['#ff7a9c', '#f9527a', '#fbbf24', '#7dd3fc', '#a78bfa', '#34d399', '#ffc9d8'];
+  const SHAPES = ['star', 'circle'];
+
+  // 1) 开场三连发
+  setTimeout(() => {
+    confetti({ particleCount: 220, spread: 360, startVelocity: 48, origin: { x: 0.5, y: 0.55 }, shapes: SHAPES, colors: COLORS, zIndex: 9999 });
+    confetti({ particleCount: 130, angle: 60, spread: 90, startVelocity: 55, origin: { x: 0, y: 0.6 }, shapes: SHAPES, colors: COLORS });
+    confetti({ particleCount: 130, angle: 120, spread: 90, startVelocity: 55, origin: { x: 1, y: 0.6 }, shapes: SHAPES, colors: COLORS });
+  }, 500);
+
+  // 2) 9 秒持续满屏撒花
+  setTimeout(() => {
+    const duration = 9000, end = Date.now() + duration;
+    (function frame() {
+      confetti({ particleCount: 9, angle: 60, spread: 70, startVelocity: 55, origin: { x: 0, y: 0.85 }, shapes: SHAPES, colors: COLORS, zIndex: 9999 });
+      confetti({ particleCount: 9, angle: 120, spread: 70, startVelocity: 55, origin: { x: 1, y: 0.85 }, shapes: SHAPES, colors: COLORS, zIndex: 9999 });
+      confetti({ particleCount: 6, angle: 90, spread: 120, startVelocity: 32, origin: { x: randomInRange(0.05, 0.95), y: 0 }, gravity: 1.4, ticks: 300, scalar: 1.2, shapes: SHAPES, colors: COLORS, zIndex: 9999 });
+      if (Math.random() < 0.18) {
+        confetti({ particleCount: 1, startVelocity: 0, ticks: 400, gravity: 0.6, scalar: 2.5, origin: { x: randomInRange(0.1, 0.9), y: 0 }, shapes: ['star'], colors: COLORS, zIndex: 9999 });
+      }
+      if (Date.now() < end) requestAnimationFrame(frame);
+    })();
+  }, 800);
+
+  // 3) 中段连环烟花（模拟烟花升空炸开）
+  [3000, 4200, 5400].forEach((t, i) => {
+    setTimeout(() => {
+      confetti({ particleCount: 120, spread: 360, startVelocity: 40,
+                 origin: { x: 0.25 + i * 0.25, y: 0.4 }, shapes: SHAPES, colors: COLORS, zIndex: 9999 });
+    }, t);
+  });
+
+  // 4) 收尾大爆发
+  setTimeout(() => {
+    confetti({ particleCount: 260, spread: 360, startVelocity: 50, origin: { x: 0.5, y: 0.5 }, shapes: SHAPES, colors: COLORS, zIndex: 9999 });
+  }, 8200);
+}
+window.grandMasterAnim = grandMasterAnim;
+</script>
+{% endblock %}

@@ -9,7 +9,9 @@
 
 <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
   <h2 class="text-2xl font-extrabold text-slate-600">📑 试卷列表</h2>
-  <div class="flex gap-2">
+  <div class="flex gap-2 flex-wrap">
+    <a href="/student/classes/{{ cls.id }}/knowledge" class="px-4 py-2 rounded-4xl bg-green-100 text-green-600 font-bold text-sm hover:bg-green-200 transition">🗺️ 知识地图</a>
+    <a href="/student/classes/{{ cls.id }}/wrong-book" class="px-4 py-2 rounded-4xl bg-yellow-100 text-yellow-600 font-bold text-sm hover:bg-yellow-200 transition">📕 错题本</a>
     <a href="/student/classes/{{ cls.id }}/my-answers" class="px-4 py-2 rounded-4xl bg-candy-100 text-candy-500 font-bold text-sm hover:bg-candy-200 transition">📝 我的答题</a>
     <a href="/classes/{{ cls.id }}/leaderboard" class="px-4 py-2 rounded-4xl bg-sky-100 text-sky2-500 font-bold text-sm hover:bg-sky-200 transition">🏆 排行榜</a>
   </div>

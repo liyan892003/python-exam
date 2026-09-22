@@ -1,0 +1,85 @@
+{# 布贴徽章墙：pieces=[{emoji,name,state:lit|half|dark,req,href?}]
+   风格：白色模切贴纸边 + 彩色渐变章面 + 白色缝线虚线圈 + 大 emoji；
+   名字显示在徽章下方（label=true 时还带了解/理解/掌握小圆标）。 #}
+{% macro puzzle_board(pieces, cols=3, px=110, label=true, gid="b") %}
+{% set n = pieces|length %}
+{% if n %}
+{% set rows = (n + cols - 1) // cols %}
+{# 浅端 → 主色（章面渐变）；edge 描边；name 色（点亮时名字用） #}
+{% set C = {"know": ("#bae6fd", "#38bdf8", "#0369a1"),
+            "understand": ("#fde68a", "#f59e0b", "#92400e"),
+            "master": ("#fecdd3", "#fb7185", "#be123c")} %}
+{% set req_label = {"know": "了解", "understand": "理解", "master": "掌握"} %}
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <linearGradient id="{{gid}}-know" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#bae6fd"/><stop offset="1" stop-color="#38bdf8"/>
+    </linearGradient>
+    <linearGradient id="{{gid}}-understand" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fde68a"/><stop offset="1" stop-color="#f59e0b"/>
+    </linearGradient>
+    <linearGradient id="{{gid}}-master" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fecdd3"/><stop offset="1" stop-color="#fb7185"/>
+    </linearGradient>
+    <linearGradient id="{{gid}}-dark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f1f5f9"/><stop offset="1" stop-color="#94a3b8"/>
+    </linearGradient>
+  </defs>
+</svg>
+<div class="inline-block p-1">
+{% for r in range(rows) %}
+  <div class="flex {% if not loop.last %}mb-2{% endif %}">
+  {% for c in range(cols) %}
+    {% set i = r * cols + c %}
+    {% if i < n %}
+      {% set p = pieces[i] %}
+      {% if p.state == 'dark' %}
+        {% set grad = gid ~ '-dark' %}{% set edge = '#94a3b8' %}{% set ncolor = 'text-slate-400' %}{% set pcolor = 'bg-slate-200 text-slate-500' %}
+      {% else %}
+        {% set grad = gid ~ '-' ~ p.req %}{% set edge = C[p.req][2] %}
+        {% if p.state == 'lit' %}
+          {% set ncolor = 'text-sky-700' if p.req == 'know' else ('text-amber-700' if p.req == 'understand' else 'text-rose-600') %}
+        {% else %}{% set ncolor = 'text-slate-400' %}{% endif %}
+        {% set pcolor = {'know':'bg-sky-100 text-sky-700','understand':'bg-amber-100 text-amber-700','master':'bg-rose-100 text-rose-600'}[p.req] %}
+      {% endif %}
+      {# 展示名：去掉 list/tuple 等英文尾巴 #}
+      {% set parts = p.name.split() %}
+      {% set dname = p.name if (parts|length < 2 or parts[-1] not in ['list','tuple','dict','set']) else (parts[:-1]|join(' ')) %}
+      <div class="flex flex-col items-center" style="width:{{ px }}px;flex:none">
+        {% if p.href %}<a href="{{ p.href }}" class="cursor-pointer hover:scale-105 transition-transform" title="{{ p.name }}（点击去练习）">{% endif %}
+        <svg viewBox="0 0 100 100" width="{{ px }}" height="{{ px }}"
+             style="{% if p.state == 'lit' %}filter:drop-shadow(0 0 8px {{ C[p.req][1] }}) drop-shadow(0 3px 2px rgba(15,23,42,.22));{% else %}filter:drop-shadow(0 3px 2px rgba(15,23,42,.2));{% endif %}">
+          <g {% if p.state == 'half' %}opacity=".55"{% endif %}{% if p.state == 'dark' %}opacity=".9"{% endif %}
+             {% if p.state == 'lit' %}style="animation:piecePop .5s cubic-bezier(.34,1.56,.64,1) {{ (i*70)|int }}ms both"{% endif %}>
+            <!-- 白色模切贴纸边 -->
+            <circle cx="50" cy="50" r="47" fill="#ffffff"/>
+            <!-- 彩色章面 -->
+            <circle cx="50" cy="50" r="42" fill="url(#{{ grad }})"/>
+            <circle cx="50" cy="50" r="42" fill="none" stroke="{{ edge }}" stroke-width="2" opacity=".3"/>
+            <!-- 缝线虚线圈 -->
+            <circle cx="50" cy="50" r="34" fill="none" stroke="#ffffff" stroke-width="2.6" stroke-dasharray="4.5 5" stroke-linecap="round" opacity=".85"/>
+            <!-- 顶部高光 -->
+            <ellipse cx="50" cy="26" rx="27" ry="10" fill="#ffffff" opacity=".38"/>
+            <!-- 主图案 -->
+            <text x="50" y="63" text-anchor="middle" font-size="34"
+                  {% if p.state == 'dark' %}opacity=".55"{% endif %}>{{ p.emoji }}</text>
+            <!-- 点亮：右上角星 -->
+            {% if p.state == 'lit' %}
+            <path d="M85 13 l2.4 4.9 5.4 .85 -3.9 3.8 .95 5.35 -4.85-2.55 -4.85 2.55 .95-5.35 -3.9-3.8 5.4-.85 z"
+                  fill="#fde047" stroke="{{ edge }}" stroke-width="1.3" stroke-linejoin="round"/>
+            {% endif %}
+          </g>
+        </svg>
+        {% if p.href %}</a>{% endif %}
+        <span class="mt-1 text-[10px] sm:text-xs font-extrabold leading-tight text-center {{ ncolor }}">{{ dname }}</span>
+        {% if label %}
+        <span class="mt-0.5 text-[8.5px] sm:text-[9.5px] font-bold px-1.5 py-px rounded-full {{ pcolor }}">{{ req_label[p.req] }}</span>
+        {% endif %}
+      </div>
+    {% endif %}
+  {% endfor %}
+  </div>
+{% endfor %}
+</div>
+{% endif %}
+{% endmacro %}

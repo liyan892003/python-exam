@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..deps import templates, require_role
 from ..models import (User, Class, ProblemSet, Question, Choice, Enrollment, Answer,
-                      QType, QuestionSource, Role, class_leaderboard)
+                      KnowledgePoint, QType, QuestionSource, Role, class_leaderboard)
 
 router = APIRouter(prefix="/teacher", tags=["teacher"])
 teacher_dep = require_role(Role.teacher)
@@ -55,6 +55,14 @@ def _get_owned_class(db: Session, cid: int, user: User) -> Class:
     if not cls:
         raise HTTPException(404, "班级不存在")
     return cls
+
+
+def _teacher_kp_chapters(db: Session, user: User):
+    """教师知识点大纲（章节→节点），供出题页打标签。"""
+    return (db.query(KnowledgePoint)
+            .filter(KnowledgePoint.teacher_id == user.id,
+                    KnowledgePoint.parent_id.is_(None))
+            .order_by(KnowledgePoint.position, KnowledgePoint.id).all())
 
 
 def _get_owned_set(db: Session, cid: int, sid: int, user: User) -> ProblemSet:
@@ -182,6 +190,7 @@ async def new_question_page(cid: int, sid: int, request: Request,
     s = _get_owned_set(db, cid, sid, user)
     return templates.TemplateResponse(request, "teacher/new_question.html", {
         "user": user, "cls": cls, "set": s,
+        "chapters": _teacher_kp_chapters(db, user),
         "error": None, "ai_message": None})
 
 
@@ -196,16 +205,33 @@ async def create_question(
     choice_correct: list[str] = Form(default=[]),  # 选择题：勾选的正确项索引
     # 判断题正确答案（独立字段，避免与 choice_correct 冲突）
     tf_correct: str = Form(default="false"),
+    # 知识点标签
+    kp_ids: list[int] = Form(default=[]),
+    difficulty: str = Form("basic"),
     user: User = Depends(teacher_dep),
     db: Session = Depends(get_db),
 ):
     cls = _get_owned_class(db, cid, user)
     s = _get_owned_set(db, cid, sid, user)
+    chapters = _teacher_kp_chapters(db, user)
+
+    def _page(err: str):
+        return templates.TemplateResponse(request, "teacher/new_question.html", {
+            "user": user, "cls": cls, "set": s, "chapters": chapters,
+            "error": err, "ai_message": None}, status_code=400)
 
     q = Question(class_id=cid, set_id=sid, q_type=QType(q_type), stem=stem.strip(),
-                 explanation=explanation.strip(), source=QuestionSource.manual)
+                 explanation=explanation.strip(), source=QuestionSource.manual,
+                 difficulty=difficulty if difficulty in ("basic", "advanced", "challenge") else "basic")
     db.add(q)
     db.flush()
+    # 知识点标签（只允许挂自己大纲下的节点）
+    if kp_ids:
+        valid_kps = (db.query(KnowledgePoint)
+                     .filter(KnowledgePoint.teacher_id == user.id,
+                             KnowledgePoint.parent_id.is_not(None),
+                             KnowledgePoint.id.in_(kp_ids)).all())
+        q.kps = valid_kps
 
     if q.q_type == QType.tf:
         # 判断题：tf_correct 存的是 "true"/"false"
@@ -215,15 +241,11 @@ async def create_question(
         # 选择题
         if len(choice_texts) < 2:
             db.rollback()
-            return templates.TemplateResponse(request, "teacher/new_question.html", {
-                "user": user, "cls": cls, "set": s,
-                "error": "选择题至少 2 个选项", "ai_message": None}, status_code=400)
+            return _page("选择题至少 2 个选项")
         correct_idx = [int(i) for i in choice_correct] if choice_correct else []
         if len(correct_idx) != 1:
             db.rollback()
-            return templates.TemplateResponse(request, "teacher/new_question.html", {
-                "user": user, "cls": cls, "set": s,
-                "error": "必须勾选恰好 1 个正确选项", "ai_message": None}, status_code=400)
+            return _page("必须勾选恰好 1 个正确选项")
         for i, txt in enumerate(choice_texts):
             txt = txt.strip()
             if not txt:
@@ -238,38 +260,92 @@ async def create_question(
 @router.post("/classes/{cid}/sets/{sid}/questions/ai-generate")
 async def ai_generate(cid: int, sid: int, request: Request,
                       ai_type: str = Form("mc"),
+                      kp_ids: list[int] = Form(default=[]),
+                      difficulty: str = Form("basic"),
                       user: User = Depends(teacher_dep),
                       db: Session = Depends(get_db)):
     """AI 出题：在指定试卷下直接落库一道题，回到出题页显示结果。"""
     from ..ai import generate_mc_question, generate_tf_question
     cls = _get_owned_class(db, cid, user)
     s = _get_owned_set(db, cid, sid, user)
+    chapters = _teacher_kp_chapters(db, user)
+    valid_kps = (db.query(KnowledgePoint)
+                 .filter(KnowledgePoint.teacher_id == user.id,
+                         KnowledgePoint.parent_id.is_not(None),
+                         KnowledgePoint.id.in_(kp_ids)).all()) if kp_ids else []
+    diff = difficulty if difficulty in ("basic", "advanced", "challenge") else "basic"
+    # 用选中的知识点名引导 AI 出题（多知识点用逗号拼接）
+    ai_topic = "、".join(kp.name for kp in valid_kps) if valid_kps else None
     ai_message = None
     error = None
     try:
         if ai_type == "tf":
-            data = generate_tf_question()
+            data = generate_tf_question(topic=ai_topic)
             q = Question(class_id=cid, set_id=sid, q_type=QType.tf, stem=data["stem"],
-                        explanation=data["explanation"], source=QuestionSource.ai)
+                        explanation=data["explanation"], source=QuestionSource.ai,
+                        difficulty=diff)
             db.add(q); db.flush()
             db.add(Choice(question_id=q.id, text="对", is_correct=bool(data["is_correct"])))
             db.add(Choice(question_id=q.id, text="错", is_correct=not bool(data["is_correct"])))
+            if valid_kps:
+                q.kps = valid_kps
             db.commit()
             ai_message = "✅ AI 已生成一道判断题并入库！"
         else:
-            out = generate_mc_question()
+            out = generate_mc_question(topic=ai_topic)
             q = Question(class_id=cid, set_id=sid, q_type=QType.mc, stem=out.stem,
-                        explanation=out.explanation, source=QuestionSource.ai)
+                        explanation=out.explanation, source=QuestionSource.ai,
+                        difficulty=diff)
             db.add(q); db.flush()
             for c in out.choices:
                 db.add(Choice(question_id=q.id, text=c.text, is_correct=c.is_correct))
+            if valid_kps:
+                q.kps = valid_kps
             db.commit()
             ai_message = "✅ AI 已生成一道选择题并入库！"
     except Exception as e:
         error = f"AI 出题失败：{e}。请检查 DEEPSEEK_API_KEY 配置，或改用手动录入。"
     return templates.TemplateResponse(request, "teacher/new_question.html", {
-        "user": user, "cls": cls, "set": s,
+        "user": user, "cls": cls, "set": s, "chapters": chapters,
         "error": error, "ai_message": ai_message})
+
+
+@router.get("/classes/{cid}/questions/{qid}/tags")
+async def question_tags_page(cid: int, qid: int, request: Request,
+                             user: User = Depends(teacher_dep),
+                             db: Session = Depends(get_db)):
+    cls = _get_owned_class(db, cid, user)
+    q = db.query(Question).filter(Question.id == qid, Question.class_id == cid).first()
+    if not q:
+        raise HTTPException(404, "题目不存在")
+    chapters = _teacher_kp_chapters(db, user)
+    tagged_ids = {k.id for k in q.kps}
+    return templates.TemplateResponse(request, "teacher/question_tags.html", {
+        "user": user, "cls": cls, "q": q,
+        "chapters": chapters, "tagged_ids": tagged_ids})
+
+
+@router.post("/classes/{cid}/questions/{qid}/tags")
+async def question_tags_save(cid: int, qid: int,
+                             kp_ids: list[int] = Form(default=[]),
+                             difficulty: str = Form("basic"),
+                             user: User = Depends(teacher_dep),
+                             db: Session = Depends(get_db)):
+    cls = _get_owned_class(db, cid, user)
+    q = db.query(Question).filter(Question.id == qid, Question.class_id == cid).first()
+    if not q:
+        raise HTTPException(404, "题目不存在")
+    valid_kps = (db.query(KnowledgePoint)
+                 .filter(KnowledgePoint.teacher_id == user.id,
+                         KnowledgePoint.parent_id.is_not(None),
+                         KnowledgePoint.id.in_(kp_ids)).all()) if kp_ids else []
+    q.kps = valid_kps
+    if difficulty in ("basic", "advanced", "challenge"):
+        q.difficulty = difficulty
+    db.commit()
+    sid = q.set_id
+    target = f"/teacher/classes/{cid}/sets/{sid}" if sid else f"/teacher/classes/{cid}"
+    return Response(status_code=303, headers={"Location": target})
 
 
 @router.post("/classes/{cid}/questions/{qid}/delete")
@@ -476,6 +552,9 @@ async def add_from_bank(cid: int, sid: int, qid: int,
     db.flush()
     for c in src.choices:
         db.add(Choice(question_id=new_q.id, text=c.text, is_correct=c.is_correct))
+    db.flush()
+    # 复制知识点标签（同一位教师的大纲，标签直接沿用）
+    new_q.kps = list(src.kps)
     db.commit()
     return Response(status_code=303,
                     headers={"Location": f"/teacher/classes/{cid}/sets/{sid}"})

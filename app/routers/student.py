@@ -13,6 +13,7 @@ from ..db import get_db
 from ..deps import templates, require_role
 from ..models import (User, Class, Enrollment, ProblemSet, Question, Choice, Answer,
                       Role)
+from ..achievements import evaluate_achievements
 
 router = APIRouter(prefix="/student", tags=["student"])
 student_dep = require_role(Role.student)
@@ -101,30 +102,16 @@ async def class_view(cid: int, request: Request,
                      user: User = Depends(student_dep),
                      db: Session = Depends(get_db)):
     cls = _ensure_enrolled(db, cid, user)
-    sets = (db.query(ProblemSet)
-            .filter(ProblemSet.class_id == cid)
-            .order_by(ProblemSet.created_at).all())
-    items = []
-    for s in sets:
-        questions = (db.query(Question)
-                     .filter(Question.set_id == s.id)
-                     .order_by(Question.created_at).all())
-        qids = [q.id for q in questions]
-        answers = (db.query(Answer)
-                   .filter(Answer.student_id == user.id,
-                           Answer.question_id.in_(qids)).all()) if qids else []
-        answered_ids = {a.question_id for a in answers}
-        score = sum(a.points_awarded for a in answers)
-        n_total = len(questions)
-        n_done = len(answered_ids)
-        items.append({
-            "set": s, "n_total": n_total, "n_done": n_done,
-            "score": score, "answered_ids": answered_ids,
-            "is_complete": n_total > 0 and n_done == n_total,
-            "not_started": n_done == 0,
-        })
-    return templates.TemplateResponse(request, "student/class_view.html", {
-        "user": user, "cls": cls, "items": items})
+    # 班级主页 = 闯关路径（顺序解锁）
+    from .levels import level_path_view
+    path = level_path_view(db, cid, user)
+    return templates.TemplateResponse(request, "student/level_path.html", {
+        "user": user, "cls": cls,
+        "items": path["items"], "current_idx": path["current_idx"],
+        "badge_tiers": path["badge_tiers"],
+        "n_badges": path["n_badges"], "n_badges_total": path["n_badges_total"],
+        "fresh_badges": path["fresh_badges"], "next_hint": path["next_hint"],
+        "celebrate": request.query_params.get("celebrate") == "1"})
 
 
 @router.get("/classes/{cid}/sets/{sid}/start")
@@ -140,9 +127,9 @@ async def start_set(cid: int, sid: int,
                         headers={"Location": f"/student/classes/{cid}"})
     next_q = next((q for q in questions if q.id not in answered_ids), None)
     if next_q is None:
-        # 全部答完，直接去排行榜看烟花
+        # 全部答完 → 去试卷解析页看作答与解析
         return Response(status_code=303,
-                        headers={"Location": f"/classes/{cid}/leaderboard"})
+                        headers={"Location": f"/student/classes/{cid}/sets/{sid}/review"})
     return Response(status_code=303,
                     headers={"Location": f"/student/classes/{cid}/questions/{next_q.id}"})
 
@@ -221,6 +208,7 @@ async def submit_answer(cid: int, qid: int,
     db.add(ans)
     db.commit()
     db.refresh(ans)
+    evaluate_achievements(db, user)
     return _next_or_leaderboard(cid, q, user, db)
 
 

@@ -6,7 +6,7 @@
     <div class="text-center mb-6">
       <div class="text-5xl mb-2">📝</div>
       <h1 class="text-3xl font-extrabold text-candy-500">为「{{ set.name }}」出题</h1>
-      <p class="text-xs text-slate-400 mt-1">{{ cls.name }} · 第 {{ questions|length + 1 if questions is defined else '' }} 题</p>
+      <p class="text-xs text-slate-400 mt-1">{{ cls.name }}</p>
     </div>
 
     {% if error %}
@@ -19,29 +19,76 @@
     <!-- AI 出题区 -->
     <div class="bg-gradient-to-br from-purple-50 to-candy-50 rounded-4xl p-5 mb-6 border-4 border-dashed border-purple-200">
       <h2 class="font-extrabold text-purple-500 mb-2 flex items-center gap-2">🤖 AI 一键出题</h2>
-      <p class="text-xs text-slate-400 mb-3">DeepSeek 自动生成 Python 练习题并入库到这套试卷，省时省力</p>
+      <p class="text-xs text-slate-400 mb-3">DeepSeek 自动生成 Python 练习题并入库到这套试卷，省时省力（生成时会带上下方勾选的知识点）</p>
+      <div class="flex gap-2 items-center mb-3">
+        <span class="text-xs font-bold text-slate-500">难度</span>
+        <select id="ai-difficulty"
+                class="text-xs rounded-xl border-2 border-purple-200 px-2 py-1.5 outline-none bg-white font-bold">
+          <option value="basic">★ 基础</option>
+          <option value="advanced">★★ 进阶</option>
+          <option value="challenge">★★★ 挑战</option>
+        </select>
+        <span class="text-[10px] text-slate-400">进阶/挑战题用于解锁白银以上徽章</span>
+      </div>
       <div class="flex gap-3">
-        <form method="post" action="/teacher/classes/{{ cls.id }}/sets/{{ set.id }}/questions/ai-generate" class="flex-1">
+        <form method="post" action="/teacher/classes/{{ cls.id }}/sets/{{ set.id }}/questions/ai-generate" class="flex-1" onsubmit="attachKp(this)">
           <input type="hidden" name="ai_type" value="mc">
           <button class="w-full py-2 rounded-2xl bg-purple-400 text-white font-bold hover:bg-purple-500 hover:scale-[1.02] transition transform">✨ AI 生成选择题</button>
         </form>
-        <form method="post" action="/teacher/classes/{{ cls.id }}/sets/{{ set.id }}/questions/ai-generate" class="flex-1">
+        <form method="post" action="/teacher/classes/{{ cls.id }}/sets/{{ set.id }}/questions/ai-generate" class="flex-1" onsubmit="attachKp(this)">
           <input type="hidden" name="ai_type" value="tf">
           <button class="w-full py-2 rounded-2xl bg-sky2-400 text-white font-bold hover:bg-sky2-500 hover:scale-[1.02] transition transform">✨ AI 生成判断题</button>
         </form>
       </div>
     </div>
 
+    <!-- 知识点标签（手动表单通过 form 属性关联；AI 表单由 JS 注入） -->
+    <div id="kp-picker" class="bg-candy-50/60 rounded-4xl p-4 mb-6">
+      <div class="flex items-center justify-between mb-2">
+        <label class="text-sm font-extrabold text-slate-500">🏷️ 知识点标签（选填，可多选）</label>
+        <a href="/teacher/knowledge" target="_blank" class="text-xs text-candy-400 font-bold hover:underline">管理知识点 →</a>
+      </div>
+      {% if chapters %}
+      <div class="space-y-2 max-h-44 overflow-y-auto pr-1">
+        {% for ch in chapters %}
+        <div class="text-xs">
+          <span class="font-extrabold text-slate-500">{{ ch.emoji }} {{ ch.name }}</span>
+          <div class="flex flex-wrap gap-1.5 mt-1">
+            {% for kp in ch.children %}
+            <label class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white border-2 border-candy-100 cursor-pointer hover:border-candy-300 transition">
+              <input type="checkbox" name="kp_ids" value="{{ kp.id }}" form="qform" class="accent-candy-400 w-3.5 h-3.5">
+              <span class="text-slate-600">{{ kp.emoji }} {{ kp.name }}</span>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="text-xs text-slate-400">还没有知识点大纲，<a href="/teacher/knowledge" target="_blank" class="text-candy-400 font-bold underline">点这里一键加载预置大纲</a></p>
+      {% endif %}
+    </div>
+
     <div class="text-center text-slate-300 text-sm mb-6">—— 或手动录入 ——</div>
 
     <!-- 手动出题 -->
     <form method="post" action="/teacher/classes/{{ cls.id }}/sets/{{ set.id }}/questions" class="space-y-4" id="qform">
-      <div>
-        <label class="block text-sm font-bold text-slate-500 mb-1">题型</label>
-        <select name="q_type" id="qtype" class="w-full px-4 py-3 rounded-2xl border-2 border-candy-100 focus:border-candy-400 outline-none transition bg-candy-50/50" onchange="toggleQType()">
-          <option value="mc">选择题（4 选 1）</option>
-          <option value="tf">判断题（对/错）</option>
-        </select>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-sm font-bold text-slate-500 mb-1">题型</label>
+          <select name="q_type" id="qtype" class="w-full px-4 py-3 rounded-2xl border-2 border-candy-100 focus:border-candy-400 outline-none transition bg-candy-50/50" onchange="toggleQType()">
+            <option value="mc">选择题（4 选 1）</option>
+            <option value="tf">判断题（对/错）</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-bold text-slate-500 mb-1">难度</label>
+          <select name="difficulty" class="w-full px-4 py-3 rounded-2xl border-2 border-candy-100 focus:border-candy-400 outline-none transition bg-candy-50/50">
+            <option value="basic">★ 基础（概念/语法）</option>
+            <option value="advanced">★★ 进阶（多步骤组合）</option>
+            <option value="challenge">★★★ 挑战（综合实战）</option>
+          </select>
+        </div>
       </div>
       <div>
         <label class="block text-sm font-bold text-slate-500 mb-1">题干</label>
@@ -93,5 +140,19 @@ function toggleQType() {
   document.getElementById('tf-options').classList.toggle('hidden', t !== 'tf');
 }
 toggleQType();
+
+// AI 表单提交前，把页面上勾选的知识点与难度注入为隐藏字段
+function attachKp(form) {
+  form.querySelectorAll('input.tmp-kp').forEach(n => n.remove());
+  document.querySelectorAll('#kp-picker input[name="kp_ids"]:checked').forEach(cb => {
+    const h = document.createElement('input');
+    h.type = 'hidden'; h.name = 'kp_ids'; h.className = 'tmp-kp'; h.value = cb.value;
+    form.appendChild(h);
+  });
+  const d = document.createElement('input');
+  d.type = 'hidden'; d.name = 'difficulty'; d.className = 'tmp-kp';
+  d.value = document.getElementById('ai-difficulty').value;
+  form.appendChild(d);
+}
 </script>
 {% endblock %}

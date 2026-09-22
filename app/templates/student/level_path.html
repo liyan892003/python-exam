@@ -1,0 +1,334 @@
+{% extends "base.html" %}
+{% block title %}{{ cls.name }} · 闯关之路{% endblock %}
+{% block content %}
+<script src="/static/lib/canvas-confetti.min.js"></script>
+<style>
+  /* 勋章 */
+  .medal-svg{width:100%;height:auto;display:block;transition:transform .35s cubic-bezier(.2,.8,.2,1)}
+  .medal-card:hover .medal-svg{transform:translateY(-6px) scale(1.03)}
+  .medal-locked{filter:grayscale(1) opacity(.32)}
+  /* 路径节点 */
+  @keyframes pulse-node {
+    0%,100% { box-shadow: 0 0 0 0 rgba(251,191,36,.55); }
+    50% { box-shadow: 0 0 0 12px rgba(251,191,36,0); }
+  }
+  .node-current { animation: pulse-node 1.6s ease-out infinite; }
+  @keyframes popin { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .popin { animation: popin .5s cubic-bezier(.34,1.56,.64,1) both; }
+  @keyframes toastIn { from{opacity:0;transform:translateY(-14px) scale(.9)} to{opacity:1;transform:none} }
+  .toast-in{animation:toastIn .4s cubic-bezier(.34,1.56,.64,1) both}
+  /* 路径几何变量：原生媒体查询（Tailwind Play CDN 对 sm: 任意属性支持不稳定） */
+  .path-geo{--node:86px;--circle:50px;--pad:6px;--gap:80px;--hb:72px;--bm:6px;--arcw:48px;--lbl:20px}
+  @media (min-width:640px){
+    .path-geo{--node:130px;--circle:66px;--pad:20px;--gap:100px;--hb:92px;--arcw:80px;--lbl:24px}
+  }
+  @media (min-width:1280px){
+    .path-geo{--node:172px;--circle:76px;--pad:28px;--gap:120px;--arcw:100px;--lbl:26px}
+  }
+  /* 顶部徽章单行轮播带 */
+  .badge-strip{scrollbar-width:none;-ms-overflow-style:none;cursor:grab;
+    overscroll-behavior-x:contain;scroll-behavior:smooth}
+  .badge-strip::-webkit-scrollbar{display:none}
+  .badge-strip.dragging{cursor:grabbing;scroll-behavior:auto}
+  .badge-strip.dragging .medal-card{pointer-events:none}
+  .edge-zone{position:absolute;top:0;bottom:0;width:48px;z-index:6;display:none;
+    align-items:center;border:0;background:transparent;padding:0;cursor:pointer}
+  .badge-strip-wrap.scrollable .edge-zone{display:flex}
+  .badge-strip-wrap.at-start .fade-l,.badge-strip-wrap.at-end .fade-r{display:none}
+  .fade-l{left:0;justify-content:flex-start;padding-left:4px;
+    background:linear-gradient(to right,rgba(255,255,255,.95) 25%,transparent)}
+  .fade-r{right:0;justify-content:flex-end;padding-right:4px;
+    background:linear-gradient(to left,rgba(255,255,255,.95) 25%,transparent)}
+  .chev{width:26px;height:26px;border-radius:999px;background:rgba(255,255,255,.92);
+    box-shadow:0 1px 7px rgba(0,0,0,.14);line-height:24px;text-align:center;
+    color:#f59e0b;font-size:20px;font-weight:900;transition:transform .15s,background .15s}
+  .edge-zone:hover .chev{background:#fff;transform:scale(1.12)}
+</style>
+
+{# 节点上半：固定高度说明气泡——标题(周次) + 简要要点 #}
+{% macro node_bubble(it) %}
+<div class="shrink-0" style="width:var(--node);height:var(--hb)">
+  {% if it.unlocked %}
+  <a href="/student/classes/{{ cls.id }}/levels/{{ it.level.id }}"
+     class="block w-full h-full bg-white/90 rounded-2xl px-2 py-1.5 shadow-md hover:scale-[1.03] transition transform border-2 overflow-hidden flex flex-col
+     {% if it.prog.complete %}border-green-200{% else %}border-amber-300{% endif %}">
+    <div class="font-extrabold text-slate-700 text-[11px] sm:text-[13px] leading-tight text-center truncate">{{ it.level.name }}</div>
+    {% if it.level.description %}
+    <div class="text-[9px] sm:text-[10.5px] text-slate-500 leading-snug mt-1 flex-1 overflow-hidden">
+      {% for line in it.level.description.split('\n') if line.strip() %}
+      <p class="truncate">• {{ line.strip() }}</p>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </a>
+  {% else %}
+  <div class="w-full h-full bg-slate-100/80 rounded-2xl px-2 py-1.5 shadow-inner opacity-70 overflow-hidden flex flex-col">
+    <div class="font-extrabold text-slate-400 text-[11px] sm:text-[13px] leading-tight text-center truncate">{{ it.level.name }}</div>
+    <div class="text-[9px] sm:text-[10.5px] text-slate-400 mt-1 text-center">🔒 先通关上一关</div>
+  </div>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{# 节点下半：序号圆圈 + 主题名标签（排高 = 圆圈 + 标签，道路从圆心穿过） #}
+{% macro node_circle(it, num) %}
+<div class="relative z-10 shrink-0 flex flex-col items-center" style="width:var(--node)">
+  <div class="flex items-center justify-center" style="width:var(--circle);height:var(--circle)">
+    {% if it.prog.complete %}
+    <div class="rounded-full bg-gradient-to-br from-green-300 to-emerald-500 flex items-center justify-center text-xl sm:text-3xl shadow-lg popin"
+         style="width:var(--circle);height:var(--circle)">✅</div>
+    {% elif it.unlocked %}
+    <div class="rounded-full bg-gradient-to-br from-amber-300 to-orange-500 node-current flex items-center justify-center shadow-lg"
+         style="width:var(--circle);height:var(--circle)">
+      <span class="text-white font-extrabold text-lg sm:text-2xl">{{ num }}</span>
+    </div>
+    {% else %}
+    <div class="rounded-full bg-slate-200 flex items-center justify-center text-base sm:text-2xl shadow-inner opacity-80"
+         style="width:var(--circle);height:var(--circle)">🔒</div>
+    {% endif %}
+  </div>
+  {% if it.level.topic %}
+  <span class="font-extrabold text-slate-600 text-[9px] sm:text-[11px] leading-tight text-center mt-0.5"
+        style="max-width:var(--node)">{{ it.level.topic }}</span>
+  {% endif %}
+</div>
+{% endmacro %}
+
+<div class="path-geo w-full max-w-[1440px] mx-auto px-3 sm:px-8 pb-10">
+  <a href="/student" class="text-sm text-slate-400 hover:text-candy-400">← 我的班级</a>
+
+  <div class="text-center mt-2 mb-5">
+    <h1 class="text-2xl sm:text-3xl font-extrabold text-amber-500">🛤️ {{ cls.name }} · 闯关之路</h1>
+    <p class="text-[11px] sm:text-xs text-slate-400 mt-1">沿 S 形小路逐周闯关，达成能力即可解锁成就徽章</p>
+  </div>
+
+  <!-- ============ 成就徽章带：顶部固定单行区域，只展示已获得徽章；
+       放不下时可鼠标拖拽、悬停左右边缘自动滑动、滚轮横滑 ============ -->
+  {% set earned = [] %}
+  {% for tier in badge_tiers %}{% for b in tier['items']|selectattr('unlocked') %}{% set _ = earned.append(b) %}{% endfor %}{% endfor %}
+  <section class="bg-white/75 rounded-3xl px-4 sm:px-7 py-3 mb-8">
+    <div class="flex items-baseline gap-x-3 flex-wrap">
+      <h2 class="text-base sm:text-lg font-extrabold text-slate-700">🏅 成就徽章墙</h2>
+      <span class="text-sm font-extrabold text-slate-400">{{ n_badges }}/{{ n_badges_total }}</span>
+      {% if next_hint %}
+      <span class="text-[11px] sm:text-xs font-bold text-amber-500/90 truncate">
+        🎯 下一枚：{{ next_hint.text }}
+      </span>
+      {% endif %}
+      {% if n_badges > 0 %}
+      <span class="ml-auto text-[11px] font-bold text-slate-300 hidden sm:inline">鼠标移到左右边缘或按住拖动 →</span>
+      {% endif %}
+    </div>
+
+    <div id="badgeStripWrap" class="badge-strip-wrap relative mt-1">
+      <div id="badgeStrip" class="badge-strip h-[84px] sm:h-[92px] flex items-center gap-2 sm:gap-3 overflow-x-auto">
+        {% for b in earned %}
+        <div class="medal-card shrink-0 w-[58px] sm:w-[68px] text-center" title="{{ b.zh }} — {{ b.desc }}">
+          <div class="w-[52px] sm:w-[60px] mx-auto">{{ medal_svg(b.code, true)|safe }}</div>
+          <div class="font-extrabold text-[10px] sm:text-[11px] leading-tight text-slate-600 truncate">{{ b.zh }}</div>
+        </div>
+        {% endfor %}
+
+        {% if n_badges == 0 %}
+        <!-- 一枚都没有：行内空状态 -->
+        <div class="flex-1 h-full flex items-center justify-center gap-2 text-slate-400">
+          <span class="text-2xl">🎯</span>
+          <p class="text-xs sm:text-sm font-bold">还没有获得成就徽章，开始答题解锁吧～</p>
+        </div>
+        {% elif n_badges < n_badges_total %}
+        <!-- 还有未获得徽章：只给数量提示，不显示未解锁徽章 -->
+        <div class="shrink-0 self-center text-[11px] sm:text-xs font-bold text-slate-300 pl-2 whitespace-nowrap">
+          还有 {{ n_badges_total - n_badges }} 枚等你解锁
+        </div>
+        {% endif %}
+      </div>
+      <!-- 左右边缘悬停区（内容超出时出现）：悬停自动横滑，点击跳一截 -->
+      <button type="button" class="edge-zone fade-l" data-dir="-1" aria-label="向左查看徽章"><span class="chev">‹</span></button>
+      <button type="button" class="edge-zone fade-r" data-dir="1" aria-label="向右查看徽章"><span class="chev">›</span></button>
+    </div>
+  </section>
+
+  <!-- ============ S 形闯关路径 ============
+       每排：固定高气泡排 + 固定高圆圈排；排间用半椭圆弧把两排圆心连起来 -->
+  {% set per_row = 4 %}
+  {% if items %}
+  <div class="relative">
+    {% for row in items|batch(per_row) %}
+    {% set ri = loop.index0 %}
+    {# reverse 必须 |list 物化，否则生成器在气泡排循环后被耗尽，圆圈排会渲染为空 #}
+    {% set ordered = row if ri is even else row|reverse|list %}
+
+    <!-- 上半排：说明气泡 -->
+    <div class="relative flex items-start justify-between" style="padding:0 var(--pad);height:var(--hb)">
+      {% for it in ordered %}{{ node_bubble(it) }}{% endfor %}
+    </div>
+
+    <!-- 下半排：序号圆圈 + 主题标签（排高=圆+标签），横路从圆心穿过 -->
+    <div class="relative flex items-start justify-between" style="padding:0 var(--pad);height:calc(var(--circle) + var(--lbl));margin-top:var(--bm)">
+      <div class="absolute h-2.5 rounded-full pointer-events-none"
+           style="left:calc(var(--pad) + var(--node)/2);right:calc(var(--pad) + var(--node)/2);
+                  top:calc(var(--circle)/2 - 5px);
+                  background:repeating-linear-gradient(to right,#fbbf7a 0 12px,transparent 12px 24px);
+                  opacity:.6"></div>
+      {% for it in ordered %}
+      {% set num = ri * per_row + loop.index if ri is even else ri * per_row + (row|length - loop.index0) %}
+      {{ node_circle(it, num) }}
+      {% endfor %}
+    </div>
+
+    {% if not loop.last %}
+    <!--
+      拐弯弧：上端点 = 上排圆心，下端点 = 下排圆心。
+      连接区高 --gap，标签高 --lbl，下排气泡高 --hb、间距 --bm，故圆心纵向距离
+      D = lbl + gap + hb + bm + circle；弧向外（偶数排向右、奇数排向左）凸出 --arcw。
+      占位列宽度=--node，保证弧的端点列与末端节点列完全重合。
+    -->
+    {% set D = 'calc(var(--lbl) + var(--gap) + var(--hb) + var(--bm) + var(--circle))' %}
+    <div class="relative flex justify-between pointer-events-none"
+         style="padding:0 var(--pad);height:var(--gap)">
+      {% if ri is even %}<div style="width:var(--node)"></div>{% endif %}
+      <div class="relative" style="width:var(--node);height:100%">
+        <svg viewBox="0 0 50 100" preserveAspectRatio="none"
+             class="absolute top-0"
+             style="height:{{ D }};top:calc(var(--circle)/-2);width:var(--arcw);
+                    {% if ri is even %}left:50%{% else %}right:50%{% endif %}">
+          {# 偶数排（左→右结束）弧向右凸；奇数排（右→左结束）弧向左凸 #}
+          <path d="{% if ri is even %}M0 0 A50 50 0 1 1 0 100{% else %}M50 0 A50 50 0 1 0 50 100{% endif %}"
+                fill="none" stroke="#fbbf7a" stroke-width="7" vector-effect="non-scaling-stroke"
+                stroke-dasharray="0.1 14" stroke-linecap="round" opacity=".75"/>
+        </svg>
+      </div>
+      {% if ri is odd %}<div style="width:var(--node)"></div>{% endif %}
+    </div>
+    {% endif %}
+    {% endfor %}
+
+    <!-- 终点 -->
+    <div class="relative flex justify-center mt-2">
+      <div class="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-gradient-to-br from-candy-300 to-pink-500 flex items-center justify-center text-3xl shadow-lg">🏁</div>
+    </div>
+  </div>
+  {% else %}
+  <div class="text-center py-16 bg-white/70 rounded-4xl">
+    <p class="text-slate-400">老师还没有布置关卡，等一等吧～</p>
+  </div>
+  {% endif %}
+
+  <div class="text-center mt-8">
+    <a href="/student/classes/{{ cls.id }}/wrong-book"
+       class="inline-block px-5 py-2.5 rounded-4xl bg-rose-100 text-rose-500 font-bold text-sm hover:bg-rose-200 transition">📕 我的错题本</a>
+  </div>
+</div>
+
+{% if n_badges == n_badges_total and n_badges_total > 0 %}
+<!-- 全部徽章集齐：满屏大动画 -->
+<div id="finale" class="fixed inset-0 z-50 bg-gradient-to-br from-amber-100/95 via-pink-100/95 to-sky-100/95 flex flex-col items-center justify-center px-6 text-center">
+  <div class="text-7xl mb-4">🏆</div>
+  <h1 class="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-candy-400 via-amber-500 to-green-500 mb-2">
+    全部成就徽章集齐！
+  </h1>
+  <p class="text-lg font-bold text-slate-600 mb-6">{{ n_badges_total }} 枚勋章见证你的 Python 成长之路，太厉害了！</p>
+  <button onclick="document.getElementById('finale').remove()"
+          class="px-8 py-3 rounded-4xl bg-white text-candy-500 font-extrabold shadow-xl hover:scale-105 transition transform">
+    收下这份成就 🎁
+  </button>
+</div>
+<script>
+(function(){
+  const end = Date.now() + 9000;
+  (function frame(){
+    confetti({particleCount: 5, angle: 60, spread: 60, origin:{x:0}, colors:['#e0a46a','#a9d2e8','#b99df2','#f5d678']});
+    confetti({particleCount: 5, angle: 120, spread: 60, origin:{x:1}, colors:['#e0a46a','#a9d2e8','#b99df2','#f5d678']});
+    if(Date.now() < end) requestAnimationFrame(frame);
+  })();
+  setTimeout(()=>confetti({particleCount: 220, spread: 100, startVelocity: 45, scalar:1.2}), 500);
+  setTimeout(()=>confetti({particleCount: 300, spread: 160, startVelocity: 55, scalar:1.3}), 6000);
+})();
+</script>
+{% endif %}
+
+{% if fresh_badges %}
+<!-- 本次新解锁徽章提示 -->
+<div class="fixed top-20 left-1/2 -translate-x-1/2 z-40 toast-in">
+  <div class="bg-white rounded-2xl shadow-2xl px-5 py-3 flex items-center gap-3 border-2 border-amber-200">
+    <span class="text-3xl">🎉</span>
+    <div>
+      <div class="font-extrabold text-slate-700 text-sm">解锁新成就！</div>
+      <div class="text-xs text-slate-500">
+        {% for code in fresh_badges %}{{ BADGE_MAP[code][4] }}{% if not loop.last %}、{% endif %}{% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  confetti({particleCount: 120, spread: 90, startVelocity: 38,
+    colors:['#e0a46a','#a9d2e8','#b99df2','#f5d678']});
+  setTimeout(()=>{const t=document.querySelector('.toast-in');if(t)t.remove()}, 4000);
+</script>
+{% endif %}
+
+{% if n_badges > 0 %}
+<!-- 徽章单行带交互：拖拽 / 边缘悬停自动滑 / 滚轮横滑 -->
+<script>
+(function(){
+  const strip=document.getElementById('badgeStrip');
+  const wrap=document.getElementById('badgeStripWrap');
+  if(!strip||!wrap) return;
+  const zones=[...wrap.querySelectorAll('.edge-zone')];
+
+  function refresh(){
+    const max=strip.scrollWidth-strip.clientWidth;
+    wrap.classList.toggle('scrollable', max>4);
+    wrap.classList.toggle('at-start', strip.scrollLeft<=2);
+    wrap.classList.toggle('at-end', strip.scrollLeft>=max-2);
+  }
+  strip.addEventListener('scroll', refresh, {passive:true});
+  window.addEventListener('resize', refresh);
+  refresh(); setTimeout(refresh, 100);
+
+  // 鼠标按住拖拽
+  let down=false, sx=0, sl=0;
+  strip.addEventListener('pointerdown', e=>{
+    down=true; sx=e.clientX; sl=strip.scrollLeft;
+    strip.classList.add('dragging');
+    try{strip.setPointerCapture(e.pointerId);}catch(_){}
+  });
+  strip.addEventListener('pointermove', e=>{
+    if(!down) return;
+    strip.scrollLeft=sl-(e.clientX-sx);
+  });
+  const stop=()=>{down=false;strip.classList.remove('dragging');};
+  strip.addEventListener('pointerup', stop);
+  strip.addEventListener('pointercancel', stop);
+
+  // 滚轮纵向 → 横向
+  strip.addEventListener('wheel', e=>{
+    if(Math.abs(e.deltaY)>Math.abs(e.deltaX)){
+      strip.scrollLeft+=e.deltaY;
+      e.preventDefault();
+    }
+  }, {passive:false});
+
+  // 鼠标悬停左右边缘 → 自动连续滑动；点击跳一截
+  let dir=0, raf=null;
+  function loop(){
+    if(dir){ strip.scrollLeft+=dir*7; raf=requestAnimationFrame(loop); }
+    else raf=null;
+  }
+  zones.forEach(z=>{
+    const d=+z.dataset.dir;
+    z.addEventListener('mouseenter', ()=>{dir=d;if(!raf)raf=requestAnimationFrame(loop);});
+    z.addEventListener('mouseleave', ()=>{dir=0;});
+    z.addEventListener('click', ()=>{
+      strip.scrollBy({left:d*strip.clientWidth*0.7, behavior:'smooth'});
+    });
+  });
+
+  // 本次刚解锁徽章：滚到最右展示新徽章
+  {% if fresh_badges %}
+  setTimeout(()=>{strip.scrollTo({left:strip.scrollWidth, behavior:'smooth'});}, 400);
+  {% endif %}
+})();
+</script>
+{% endif %}
+{% endblock %}

@@ -29,6 +29,37 @@
   </form>
 </div>
 
+<!-- 闯关关卡管理 -->
+<div class="bg-gradient-to-r from-amber-50 to-orange-50 rounded-4xl p-6 shadow-md mb-6 border-4 border-amber-200">
+  <h2 class="text-xl font-extrabold text-amber-600 mb-1 flex items-center gap-2">🛤️ 闯关关卡</h2>
+  <p class="text-xs text-slate-400 mb-4">学生班级主页是一条闯关小路：按顺序解锁，每关含若干试卷与知识点。</p>
+  {% if cls.levels %}
+  <div class="space-y-2 mb-4">
+    {% for lv in cls.levels|sort(attribute='position') %}
+    <div class="flex items-center justify-between gap-3 bg-white/80 rounded-2xl px-4 py-3">
+      <div class="flex-1">
+        <span class="font-extrabold text-slate-700">🚩 {{ lv.name }}</span>
+        <span class="ml-2 text-xs text-slate-400">{{ lv.sets|length }} 套试卷 · {{ lv.kp_links|length }} 个知识点</span>
+      </div>
+      <a href="/teacher/classes/{{ cls.id }}/levels/{{ lv.id }}"
+         class="px-3 py-1.5 rounded-xl bg-amber-100 text-amber-600 text-sm font-bold hover:bg-amber-200 transition">⚙️ 配置</a>
+      <form method="post" action="/teacher/classes/{{ cls.id }}/levels/{{ lv.id }}/delete"
+            onsubmit="return confirm('删除关卡「{{ lv.name }}」？试卷和题目不会删除。');">
+        <button class="px-2 py-1.5 rounded-xl bg-red-50 text-red-400 text-sm hover:bg-red-100 transition">🗑️</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  <form method="post" action="/teacher/classes/{{ cls.id }}/levels" class="flex flex-col sm:flex-row gap-3">
+    <input type="text" name="name" required placeholder="新关卡名，如：第 2 周 · 条件与循环"
+           class="flex-1 px-4 py-3 rounded-2xl border-2 border-amber-200 focus:border-amber-400 outline-none transition bg-white/80">
+    <input type="text" name="description" placeholder="选填：本周学习说明"
+           class="flex-1 px-4 py-3 rounded-2xl border-2 border-amber-200 focus:border-amber-400 outline-none transition bg-white/80">
+    <button class="px-6 py-3 rounded-2xl bg-amber-400 text-white font-bold shadow-lg hover:bg-amber-500 hover:scale-105 transition transform whitespace-nowrap">➕ 建关卡</button>
+  </form>
+</div>
+
 <div class="flex items-center justify-between mb-4">
   <h2 class="text-2xl font-extrabold text-slate-600">📚 试卷列表（{{ set_stats|length }}）</h2>
   <a href="/classes/{{ cls.id }}/leaderboard" class="px-4 py-2 rounded-4xl bg-sky-100 text-sky2-500 font-bold text-sm hover:bg-sky-200 transition">🏆 排行榜</a>

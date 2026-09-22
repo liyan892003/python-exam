@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}配置关卡 · {{ lv.name }}{% endblock %}
+{% block content %}
+<div class="max-w-6xl w-full mx-auto px-4">
+  <a href="/teacher/classes/{{ cls.id }}" class="inline-block mb-4 text-sm text-slate-400 hover:text-candy-400">← 返回班级</a>
+
+  <div class="grid lg:grid-cols-2 gap-6 items-start">
+    <!-- 左列：基本信息（固定高度卡片） -->
+    <div class="bg-white/85 rounded-4xl p-6 shadow-xl h-[520px] flex flex-col">
+      <h1 class="text-2xl font-extrabold text-amber-500 mb-4 shrink-0">🚩 {{ lv.name }}</h1>
+      <form method="post" action="/teacher/classes/{{ cls.id }}/levels/{{ lv.id }}/edit"
+            class="flex-1 flex flex-col gap-3 min-h-0">
+        <label class="shrink-0">
+          <span class="text-xs font-bold text-slate-400">关卡名称</span>
+          <input type="text" name="name" value="{{ lv.name }}" required
+                 class="mt-1 w-full px-4 py-3 rounded-2xl border-2 border-amber-200 focus:border-amber-400 outline-none bg-amber-50/40 font-bold">
+        </label>
+        <label class="shrink-0">
+          <span class="text-xs font-bold text-slate-400">路径圆圈主题短名（2-6 字最佳）</span>
+          <input type="text" name="topic" value="{{ lv.topic or '' }}" maxlength="32"
+                 placeholder="如：Python基础、循环结构、函数入门"
+                 class="mt-1 w-full px-4 py-3 rounded-2xl border-2 border-amber-200 focus:border-amber-400 outline-none bg-amber-50/40 text-sm">
+        </label>
+        <label class="flex-1 flex flex-col min-h-0">
+          <span class="text-xs font-bold text-slate-400 shrink-0">本周学习说明（展示给学生）</span>
+          <textarea name="description" placeholder="支持换行"
+                    class="mt-1 flex-1 min-h-0 w-full px-4 py-3 rounded-2xl border-2 border-amber-200 focus:border-amber-400 outline-none bg-amber-50/40 resize-none">{{ lv.description or '' }}</textarea>
+        </label>
+        <button class="shrink-0 px-6 py-2.5 rounded-2xl bg-amber-400 text-white font-bold shadow hover:bg-amber-500 transition">💾 保存名称与说明</button>
+      </form>
+    </div>
+
+    <!-- 右列：挂载试卷（固定高度卡片） -->
+    <div class="bg-white/85 rounded-4xl p-6 shadow-xl h-[520px] flex flex-col">
+      <h2 class="text-lg font-extrabold text-slate-600 mb-1 shrink-0">📑 本关试卷</h2>
+      <p class="text-xs text-slate-400 mb-3 shrink-0">先选单元，再从下拉框选试卷挂上；学生答完本关全部试卷后下一关解锁。</p>
+
+      <!-- 已挂试卷 chips（固定高度、内部滚动） -->
+      <div class="shrink-0 mb-3">
+        <div class="text-xs font-bold text-slate-400 mb-2">已挂试卷（{{ linked_set_ids|length }}）</div>
+        <div class="h-[150px] overflow-y-auto rounded-2xl border-2 border-candy-100 bg-candy-50/40 p-2.5 flex flex-wrap content-start gap-2">
+          {% if linked_set_ids %}
+          {% for s in sets if s.id in linked_set_ids %}
+          <span class="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 rounded-full bg-candy-400 text-white text-xs font-bold shadow-sm">
+            {{ s.name }}
+            <span class="opacity-80 font-normal">· {{ s.questions|length }}题</span>
+            <form method="post" action="/teacher/classes/{{ cls.id }}/levels/{{ lv.id }}/sets/remove"
+                  onsubmit="return confirm('把「{{ s.name }}」移出本关？')">
+              <input type="hidden" name="set_id" value="{{ s.id }}">
+              <button type="submit" class="w-5 h-5 rounded-full bg-white/25 hover:bg-white/45 transition leading-none" title="移出">✕</button>
+            </form>
+          </span>
+          {% endfor %}
+          {% else %}
+          <p class="text-slate-400 text-xs m-auto">还没有挂试卷，从下方选择挂上</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- 添加试卷：单元下拉 + 试卷下拉 -->
+      {% if sets %}
+      <form method="post" action="/teacher/classes/{{ cls.id }}/levels/{{ lv.id }}/sets/add"
+            class="mt-auto shrink-0 grid grid-cols-[110px_1fr_auto] gap-2 items-end">
+        <label>
+          <span class="text-xs font-bold text-slate-400">单元</span>
+          <select id="unitSelect"
+                  class="mt-1 w-full px-2 py-2.5 rounded-xl border-2 border-slate-200 bg-white text-sm font-bold outline-none focus:border-candy-300">
+            <option value="">全部单元</option>
+            {% for u in unit_names %}
+            <option value="{{ u }}">{{ u }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          <span class="text-xs font-bold text-slate-400">试卷</span>
+          <select id="setSelect" name="set_id" required
+                  class="mt-1 w-full px-2 py-2.5 rounded-xl border-2 border-slate-200 bg-white text-sm font-bold outline-none focus:border-candy-300">
+            <option value="" data-unit="">请选择试卷…</option>
+            {% for s in sets %}
+            <option value="{{ s.id }}" data-unit="{{ set_unit.get(s.id, '未分组') }}"
+                    {% if s.id in linked_set_ids %}disabled{% endif %}>
+              {{ s.name }}（{{ s.questions|length }}题{% if s.id in linked_set_ids %}·已挂{% endif %}）
+            </option>
+            {% endfor %}
+          </select>
+        </label>
+        <button class="px-4 py-2.5 rounded-xl bg-candy-400 text-white text-sm font-bold shadow hover:bg-candy-500 transition whitespace-nowrap">➕ 挂上</button>
+      </form>
+      {% else %}
+      <p class="mt-auto text-slate-400 text-sm shrink-0">班级还没有试卷，先去建试卷。</p>
+      {% endif %}
+    </div>
+
+    <!-- 下方整宽：知识点 -->
+    <div class="lg:col-span-2 bg-white/85 rounded-4xl p-6 shadow-xl">
+      <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+        <h2 class="text-lg font-extrabold text-slate-600">🧩 本关知识点</h2>
+        <a href="/teacher/knowledge" class="text-xs font-bold text-candy-500 hover:text-candy-600">去知识点管理 →</a>
+      </div>
+      <p class="text-xs text-slate-400 mb-4">
+        勾选本关涉及的知识点并设教学要求：<b class="text-sky-500">🔵 了解</b>（答过即亮）、
+        <b class="text-amber-500">🟡 理解</b> 与 <b class="text-rose-500">🔴 掌握</b>
+        （AI 根据学生答题情况严格判定，判定为「已掌握」才点亮）。
+      </p>
+      {% if chapters %}
+      <form method="post" action="/teacher/classes/{{ cls.id }}/levels/{{ lv.id }}/kps">
+        <div class="grid lg:grid-cols-2 gap-x-8 gap-y-4">
+          {% for ch in chapters %}
+          <div>
+            <div class="text-sm font-extrabold text-slate-500 mb-2">{{ ch.emoji }} {{ ch.name }}</div>
+            <div class="grid sm:grid-cols-2 gap-2">
+              {% for kp in ch.children %}
+              {% set cur = linked_map.get(kp.id) %}
+              <div class="flex items-center gap-2 px-3 py-2 rounded-2xl border-2 transition
+                {% if cur %}border-green-300 bg-green-50{% else %}border-slate-100 hover:border-green-200{% endif %}">
+                <input type="checkbox" name="kp_ids" value="{{ kp.id }}" class="kp-chk accent-green-500 w-4 h-4"
+                       {% if cur %}checked{% endif %}
+                       onchange="this.closest('div').querySelector('select').disabled=!this.checked">
+                <span class="flex-1 text-sm font-bold text-slate-600 truncate">{{ kp.emoji }} {{ kp.name }}</span>
+                <select name="req_{{ kp.id }}" {% if not cur %}disabled{% endif %}
+                        class="text-xs rounded-lg border-2 border-slate-100 px-1 py-1 outline-none bg-white">
+                  <option value="know" {% if cur == 'know' %}selected{% endif %}>🔵 了解</option>
+                  <option value="understand" {% if cur != 'know' and cur != 'master' %}selected{% endif %}>🟡 理解</option>
+                  <option value="master" {% if cur == 'master' %}selected{% endif %}>🔴 掌握</option>
+                </select>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        <button class="mt-5 px-6 py-2.5 rounded-2xl bg-green-400 text-white font-bold shadow hover:bg-green-500 transition">💾 保存知识点</button>
+      </form>
+      <!-- 内联新增知识点（独立表单，不嵌套在保存表单内） -->
+      <div class="mt-4 pt-4 border-t-2 border-slate-100">
+        <div class="text-xs font-bold text-slate-400 mb-3">➕ 在章节下新增知识点（新增后自动挂到本关）</div>
+        <div class="grid lg:grid-cols-2 gap-x-8 gap-y-3">
+          {% for ch in chapters %}
+          <form method="post" action="/teacher/classes/{{ cls.id }}/levels/{{ lv.id }}/kps/add"
+                class="flex gap-2 items-center flex-wrap">
+            <input type="hidden" name="parent_id" value="{{ ch.id }}">
+            <span class="text-xs font-bold text-slate-400 w-20 truncate">{{ ch.emoji }} {{ ch.name }}</span>
+            <input name="emoji" value="⭐" maxlength="4" placeholder="图标"
+                   class="w-12 px-1 py-1.5 rounded-lg border-2 border-sky-100 text-center text-sm bg-white">
+            <input name="name" placeholder="新知识点名称" required maxlength="128"
+                   class="flex-1 min-w-[100px] px-2 py-1.5 rounded-lg border-2 border-sky-100 text-sm font-bold bg-white">
+            <button class="px-3 py-1.5 rounded-lg bg-sky-100 text-sky-600 text-xs font-bold hover:bg-sky-200 transition whitespace-nowrap">新增</button>
+          </form>
+          {% endfor %}
+        </div>
+      </div>
+      {% else %}
+      <p class="text-slate-400 text-sm mb-3">还没有知识点大纲。</p>
+      <a href="/teacher/knowledge" class="inline-block px-5 py-2.5 rounded-2xl bg-candy-400 text-white font-bold text-sm">🌟 去添加知识点</a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const unitSel = document.getElementById('unitSelect');
+  const setSel = document.getElementById('setSelect');
+  if (!unitSel || !setSel) return;
+  const placeholder = setSel.querySelector('option[value=""]');
+  unitSel.addEventListener('change', () => {
+    const u = unitSel.value;
+    let firstEnabled = null;
+    Array.from(setSel.options).forEach(opt => {
+      if (opt === placeholder) return;
+      const show = !u || opt.dataset.unit === u;
+      opt.hidden = !show;
+      if (show && !opt.disabled && !firstEnabled) firstEnabled = opt;
+    });
+    setSel.value = firstEnabled ? firstEnabled.value : '';
+  });
+})();
+</script>
+{% endblock %}

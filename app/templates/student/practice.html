@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}{{ '错题重做' if mode == 'retry' else '知识点练习' }}{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto"
+     x-data="{}"
+     {% if feedback and feedback.att.is_correct %}x-init="practiceWin()"{% endif %}>
+  {% set fq = ('&' + from_query) if from_query else '' %}
+
+  <!-- 返回与进度 -->
+  <div class="flex items-center justify-between mb-4">
+    <a href="{% if mode == 'retry' %}/student/classes/{{ cls.id }}/wrong-book{% else %}/student/classes/{{ cls.id }}/knowledge/{{ kp.id }}{% if from_query %}?{{ from_query }}{% endif %}{% endif %}"
+       class="text-sm text-slate-400 hover:text-candy-400">← 返回</a>
+    {% if q %}
+    <span class="text-sm font-bold px-3 py-1 rounded-full
+      {% if mode == 'retry' %}bg-yellow-100 text-yellow-600{% else %}bg-candy-100 text-candy-500{% endif %}">
+      {% if mode == 'retry' %}📕 错题重做{% else %}🎯 {{ kp.emoji }} {{ kp.name }} · 第 {{ idx + 1 }}/{{ n_total }} 题{% endif %}
+    </span>
+    {% endif %}
+  </div>
+
+  {% if not q %}
+  <div class="text-center py-16 bg-white/60 rounded-4xl">
+    <div class="text-6xl mb-4">📭</div>
+    <p class="text-slate-400">这个知识点暂时没有练习题</p>
+    <a href="/student/classes/{{ cls.id }}/knowledge{% if kp %}/{{ kp.id }}{% if from_query %}?{{ from_query }}{% endif %}{% endif %}"
+       class="inline-block mt-4 px-6 py-3 rounded-4xl bg-candy-400 text-white font-bold">返回知识点</a>
+  </div>
+  {% else %}
+
+  <!-- 练习进度条（仅知识点练习） -->
+  {% if mode == 'kp' and n_total > 1 %}
+  <div class="h-2 bg-candy-50 rounded-full overflow-hidden mb-5">
+    <div class="h-full bg-gradient-to-r from-candy-300 to-candy-500 transition-all"
+         style="width: {{ ((idx + (1 if feedback else 0)) / n_total * 100) | int }}%"></div>
+  </div>
+  {% endif %}
+
+  <div class="bg-white/85 rounded-4xl p-8 shadow-xl">
+    <div class="flex items-center gap-2 flex-wrap">
+      <span class="text-xs font-bold px-2 py-0.5 rounded-full {{ 'bg-candy-100 text-candy-500' if q.q_type.value == 'mc' else 'bg-sky-100 text-sky2-500' }}">
+        {{ '选择题' if q.q_type.value == 'mc' else '判断题' }}
+      </span>
+      {% if feedback %}
+      <span class="text-xs font-extrabold px-2 py-0.5 rounded-full animate-pop
+        {{ 'bg-green-100 text-green-600' if feedback.att.is_correct else 'bg-red-100 text-red-500' }}">
+        {{ '🎉 答对啦' if feedback.att.is_correct else '💪 答错了' }}
+      </span>
+      {% endif %}
+    </div>
+    <h1 class="text-xl font-extrabold text-slate-700 mt-3 leading-relaxed">{{ q.stem }}</h1>
+
+    {% if not feedback %}
+    <!-- 作答表单 -->
+    <form method="post"
+          action="{% if mode == 'retry' %}/student/classes/{{ cls.id }}/wrong-book/retry/{{ q.id }}{% else %}/student/classes/{{ cls.id }}/knowledge/{{ kp.id }}/practice{% endif %}"
+          class="mt-6 space-y-3">
+      {% if mode == 'kp' %}<input type="hidden" name="idx" value="{{ idx }}">{% endif %}
+      {% if from_query %}
+      <input type="hidden" name="from_src" value="{{ from_src }}">
+      <input type="hidden" name="lid" value="{{ from_lid }}">
+      {% endif %}
+      {% for c in q.choices %}
+      <label class="flex items-center gap-3 p-4 rounded-2xl border-2 border-candy-100 bg-candy-50/50 cursor-pointer hover:border-candy-300 hover:bg-candy-50 transition">
+        <input type="radio" name="choice_id" value="{{ c.id }}" required class="w-5 h-5 accent-candy-400">
+        <span class="font-bold text-slate-600">{{ c.text }}</span>
+      </label>
+      {% endfor %}
+      <button class="w-full py-3 rounded-2xl bg-candy-400 text-white font-extrabold text-lg shadow-lg hover:bg-candy-500 hover:scale-[1.02] transition transform mt-2">
+        提交答案
+      </button>
+    </form>
+
+    {% else %}
+    <!-- 即时反馈：选项高亮（与作答区同位置，不额外占行） -->
+    <div class="mt-6 space-y-3">
+      {% for c in q.choices %}
+      <div class="flex items-center gap-3 p-4 rounded-2xl border-2
+        {% if c.id == feedback.correct_choice.id %}border-green-300 bg-green-50 font-extrabold text-green-600
+        {% elif c.id == feedback.picked.id and not feedback.att.is_correct %}border-red-300 bg-red-50 text-red-500 line-through
+        {% else %}border-slate-100 bg-slate-50 text-slate-400{% endif %}">
+        <span class="text-lg">
+          {% if c.id == feedback.correct_choice.id %}✅
+          {% elif c.id == feedback.picked.id and not feedback.att.is_correct %}❌
+          {% else %}◯{% endif %}
+        </span>
+        <span>{{ c.text }}</span>
+      </div>
+      {% endfor %}
+    </div>
+
+    {% if q.explanation %}
+    <div class="mt-4 bg-yellow-50 rounded-2xl p-4 text-sm text-slate-600">
+      <span class="font-extrabold text-yellow-600">💡 解析：</span>{{ q.explanation }}
+    </div>
+    {% endif %}
+
+    <!-- 下一题 / 完成 / 再试一次 -->
+    <div class="mt-4">
+      {% if mode == 'retry' %}
+        {% if feedback.att.is_correct %}
+        <a href="/student/classes/{{ cls.id }}/wrong-book"
+           class="block w-full py-3 rounded-2xl bg-green-400 text-white font-extrabold text-center text-lg shadow-lg hover:bg-green-500 hover:scale-[1.02] transition transform">
+          🌟 攻克了！返回错题本
+        </a>
+        {% else %}
+        <a href="/student/classes/{{ cls.id }}/wrong-book/retry/{{ q.id }}"
+           class="block w-full py-3 rounded-2xl bg-candy-400 text-white font-extrabold text-center text-lg shadow-lg hover:bg-candy-500 hover:scale-[1.02] transition transform">
+          🔁 再试一次
+        </a>
+        {% endif %}
+      {% elif idx + 1 < n_total %}
+      <a href="/student/classes/{{ cls.id }}/knowledge/{{ kp.id }}/practice?idx={{ idx + 1 }}{{ fq }}"
+         class="block w-full py-3 rounded-2xl bg-candy-400 text-white font-extrabold text-center text-lg shadow-lg hover:bg-candy-500 hover:scale-[1.02] transition transform">
+        下一题（{{ idx + 2 }}/{{ n_total }}）→
+      </a>
+      {% else %}
+      <a href="/student/classes/{{ cls.id }}/knowledge/{{ kp.id }}{% if from_query %}?{{ from_query }}{% endif %}"
+         class="block w-full py-3 rounded-2xl bg-gradient-to-r from-yellow-300 to-candy-400 text-white font-extrabold text-center text-lg shadow-lg hover:scale-[1.02] transition transform">
+        🏁 练习完成！返回知识点
+      </a>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// 练习答对：来一发小彩屑（克制版，不打断节奏）
+function practiceWin() {
+  if (!window.confetti) return;
+  const COLORS = ['#ff7a9c', '#fbbf24', '#7dd3fc', '#a78bfa', '#34d399'];
+  setTimeout(() => {
+    confetti({ particleCount: 70, spread: 90, startVelocity: 32,
+               origin: { x: 0.5, y: 0.55 }, shapes: ['star', 'circle'],
+               colors: COLORS, scalar: 1, zIndex: 9999 });
+  }, 200);
+}
+window.practiceWin = practiceWin;
+</script>
+{% endblock %}

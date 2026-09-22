@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}{{ kp.emoji }} {{ kp.name }}{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto">
+  <a href="{{ back_url }}" class="text-sm text-slate-400 hover:text-candy-400">← {{ back_label }}</a>
+
+  <div class="bg-white/85 rounded-4xl p-8 shadow-xl mt-2 text-center">
+    <div class="text-7xl mb-3 {{ 'animate-float-trophy' if stars == 3 }}">{{ kp.emoji }}</div>
+    {% if chapter %}<p class="text-xs font-bold text-slate-400">{{ chapter.emoji }} {{ chapter.name }}</p>{% endif %}
+    <h1 class="text-3xl font-extrabold text-candy-500 mt-1">{{ kp.name }}</h1>
+    <p class="text-slate-500 mt-3 text-sm leading-relaxed min-h-[1.5rem]">{{ kp.description or '老师还没写说明，直接做题吧！' }}</p>
+
+    <!-- 星级（答题数量自动点亮） -->
+    <div class="mt-4 inline-flex flex-col items-center gap-1 px-6 py-3 rounded-3xl bg-gradient-to-r from-yellow-50 to-amber-50 ring-2 ring-yellow-100">
+      <div class="text-3xl tracking-widest leading-none">
+        {% for i in range(3) %}{{ '⭐' if i < stars else '☆' }}{% endfor %}
+      </div>
+      <div class="text-[11px] font-bold text-slate-400">
+        {% if stars == 3 %}🌟 满星掌握！{% else %}下一星：{{ ['练过 2 题','答对 3 题','答对 5 题'][stars] }}{% endif %}
+      </div>
+    </div>
+
+    <!-- 数据卡片 -->
+    <div class="grid grid-cols-4 gap-3 mt-6">
+      <div class="bg-candy-50 rounded-2xl p-3">
+        <div class="text-2xl font-extrabold text-candy-500">{{ n_q }}</div>
+        <div class="text-[11px] text-slate-400 font-bold">可练习题</div>
+      </div>
+      <div class="bg-sky-50 rounded-2xl p-3">
+        <div class="text-2xl font-extrabold text-sky2-500">{{ n_attempted }}</div>
+        <div class="text-[11px] text-slate-400 font-bold">练过题数</div>
+      </div>
+      <div class="bg-green-50 rounded-2xl p-3">
+        <div class="text-2xl font-extrabold text-green-500">{{ n_correct }}</div>
+        <div class="text-[11px] text-slate-400 font-bold">答对题数</div>
+      </div>
+      <div class="bg-yellow-50 rounded-2xl p-3">
+        <div class="text-2xl font-extrabold {{ 'text-red-400' if n_wrong else 'text-yellow-500' }}">{{ n_wrong }}</div>
+        <div class="text-[11px] text-slate-400 font-bold">待攻克错题</div>
+      </div>
+    </div>
+
+    <!-- 操作 -->
+    <div class="mt-7 space-y-3">
+      {% if n_q > 0 %}
+      <a href="/student/classes/{{ cls.id }}/knowledge/{{ kp.id }}/practice?idx=0{% if from_query %}&{{ from_query }}{% endif %}"
+         class="block w-full py-4 rounded-2xl bg-candy-400 text-white font-extrabold text-lg shadow-lg hover:bg-candy-500 hover:scale-[1.02] transition transform">
+        🎯 开始练习（{{ n_q }} 题，即时反馈）
+      </a>
+      {% else %}
+      <div class="w-full py-4 rounded-2xl bg-slate-100 text-slate-400 font-bold">⏳ 老师还没给这个知识点配练习题</div>
+      {% endif %}
+
+      {% if n_wrong > 0 %}
+      <a href="/student/classes/{{ cls.id }}/wrong-book"
+         class="block w-full py-3 rounded-2xl bg-yellow-100 text-yellow-600 font-bold hover:bg-yellow-200 transition">
+        📕 去错题本重做 {{ n_wrong }} 道错题
+      </a>
+      {% endif %}
+    </div>
+
+    <!-- 星级规则说明 -->
+    <p class="text-[11px] text-slate-300 mt-5">⭐ 练过 2 题 · ⭐⭐ 答对 3 题 · ⭐⭐⭐ 答对 5 题（答对以去重后计）</p>
+  </div>
+</div>
+{% endblock %}

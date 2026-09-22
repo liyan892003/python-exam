@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}错题本 - {{ cls.name }}{% endblock %}
+{% block content %}
+<div class="mb-6">
+  <a href="/student/classes/{{ cls.id }}" class="text-sm text-slate-400 hover:text-candy-400">← 返回班级</a>
+  <h1 class="text-3xl font-extrabold text-candy-500 mt-2 text-center">📕 我的错题本</h1>
+  <p class="text-center text-slate-400 text-sm mt-1">只收录考试答错的题；重做答对就会自动移出错题本</p>
+</div>
+
+<!-- AI 学情诊断报告 -->
+{% if report %}
+<div class="max-w-2xl mx-auto bg-white rounded-3xl shadow-lg border border-slate-200 overflow-hidden mb-6">
+  <div class="flex items-center gap-2 px-6 py-4 bg-slate-50 border-b border-slate-200">
+    <h2 class="font-extrabold text-slate-700">学情诊断报告</h2>
+    <span class="text-[10px] px-2 py-0.5 rounded-full font-bold
+      {{ 'bg-indigo-100 text-indigo-600' if report.source == 'ai' else 'bg-slate-200 text-slate-500' }}">
+      {{ 'DeepSeek AI' if report.source == 'ai' else '规则分析' }}
+    </span>
+    <span class="ml-auto text-[10px] text-slate-400">基于当前未攻克错题</span>
+  </div>
+  <div class="px-6 py-5 space-y-4 text-sm">
+    <p class="text-slate-700 leading-relaxed whitespace-pre-line font-medium">{{ report.summary }}</p>
+
+    {% if report.labels %}
+    <div class="flex flex-wrap gap-2">
+      {% for lab in report.labels.split('||') if ':' in lab %}
+      {% set parts = lab.split(':') %}
+      <span class="inline-flex items-center px-3 py-1 rounded-lg text-xs font-bold
+        {% if parts[1] == '薄弱' %}bg-rose-50 text-rose-600 border border-rose-200
+        {% elif parts[1] == '一般' %}bg-amber-50 text-amber-600 border border-amber-200
+        {% elif parts[1] == '良好' %}bg-emerald-50 text-emerald-600 border border-emerald-200
+        {% else %}bg-slate-50 text-slate-500 border border-slate-200{% endif %}">
+        {{ parts[0] }} · {{ parts[1] }}
+      </span>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div>
+      <h3 class="text-xs font-extrabold text-slate-400 tracking-wider mb-1">问题定位</h3>
+      <p class="text-slate-600 leading-relaxed whitespace-pre-line">{{ report.problems }}</p>
+    </div>
+
+    <div>
+      <h3 class="text-xs font-extrabold text-slate-400 tracking-wider mb-1">改进建议</h3>
+      <div class="text-slate-600 leading-relaxed space-y-1">
+        {% for line in report.advice.split('\n') if line.strip() %}
+        {% if line.strip().startswith('>>>') %}
+        <code class="block bg-slate-900 text-emerald-300 rounded-lg px-3 py-1.5 font-mono text-xs whitespace-pre-wrap overflow-x-auto">{{ line.strip()[3:] }}</code>
+        {% else %}
+        <p class="whitespace-pre-line">{{ line }}</p>
+        {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- 汇总 -->
+<div class="flex justify-center gap-3 mb-8">
+  <div class="bg-white/85 rounded-2xl px-6 py-3 shadow text-center">
+    <div class="text-2xl font-extrabold text-red-400">{{ n_wrong }}</div>
+    <div class="text-[11px] text-slate-400 font-bold">待攻克</div>
+  </div>
+  <div class="bg-white/85 rounded-2xl px-6 py-3 shadow text-center">
+    <div class="text-2xl font-extrabold text-green-500">{{ n_resolved }}</div>
+    <div class="text-[11px] text-slate-400 font-bold">已攻克</div>
+  </div>
+</div>
+
+{% if groups %}
+<div class="space-y-6">
+  {% for g in groups %}
+  <div class="bg-white/85 rounded-4xl p-5 shadow-md">
+    <h2 class="font-extrabold text-slate-600 mb-4 flex items-center gap-2">
+      <span class="px-3 py-1 rounded-full bg-yellow-100 text-yellow-600 text-sm">{{ g.title }}</span>
+      <span class="text-xs text-slate-400">{{ g['items']|length }} 道</span>
+    </h2>
+    <div class="space-y-4">
+      {% for it in g['items'] %}
+      <div class="rounded-2xl border-2 border-red-100 bg-red-50/40 p-4">
+        <div class="flex items-start justify-between gap-3">
+          <p class="font-bold text-slate-700 flex-1">
+            <span class="text-xs font-bold px-2 py-0.5 rounded-full mr-1 {{ 'bg-candy-100 text-candy-500' if it.q.q_type.value == 'mc' else 'bg-sky-100 text-sky2-500' }}">
+              {{ '选择' if it.q.q_type.value == 'mc' else '判断' }}
+            </span>
+            {{ it.q.stem }}
+          </p>
+          <a href="/student/classes/{{ cls.id }}/wrong-book/retry/{{ it.q.id }}"
+             class="shrink-0 px-4 py-2 rounded-xl bg-candy-400 text-white text-sm font-bold hover:bg-candy-500 hover:scale-105 transition transform">
+            🔁 重做
+          </a>
+        </div>
+        <div class="mt-2 text-sm space-y-0.5">
+          <div class="text-red-400">❌ 你的答案：{{ it.picked.text if it.picked else '（未作答）' }}</div>
+          <div class="text-green-500 font-bold">✅ 正确答案：
+            {% for c in it.q.choices if c.is_correct %}{{ c.text }}{% if not loop.last %} / {% endif %}{% endfor %}
+          </div>
+        </div>
+        {% if it.q.explanation %}
+        <div class="mt-2 text-xs text-slate-500 bg-yellow-50 rounded-xl p-2">
+          <span class="font-extrabold text-yellow-600">💡 </span>{{ it.q.explanation }}
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% elif n_resolved > 0 %}
+<div class="text-center py-16 bg-white/60 rounded-4xl">
+  <div class="text-6xl mb-4 animate-float-trophy">🌟</div>
+  <p class="font-extrabold text-green-500 text-lg">错题全部攻克啦！</p>
+  <p class="text-slate-400 text-sm mt-1">已攻克 {{ n_resolved }} 道，继续保持～</p>
+  <a href="/student/classes/{{ cls.id }}/knowledge" class="inline-block mt-5 px-6 py-3 rounded-4xl bg-candy-400 text-white font-bold shadow-lg hover:bg-candy-500 transition">🗺️ 回到知识地图</a>
+</div>
+{% else %}
+<div class="text-center py-16 bg-white/60 rounded-4xl">
+  <div class="text-6xl mb-4">🎈</div>
+  <p class="text-slate-400">还没有错题，继续加油！</p>
+  <a href="/student/classes/{{ cls.id }}/knowledge" class="inline-block mt-5 px-6 py-3 rounded-4xl bg-candy-400 text-white font-bold shadow-lg hover:bg-candy-500 transition">🗺️ 去知识地图练习</a>
+</div>
+{% endif %}
+{% endblock %}

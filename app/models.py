@@ -11,7 +11,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     Column, Integer, String, Text, Boolean, DateTime, ForeignKey,
-    UniqueConstraint, Enum as SAEnum, func, and_,
+    UniqueConstraint, Enum as SAEnum, func, and_, Table,
 )
 from sqlalchemy.orm import relationship
 
@@ -95,6 +95,16 @@ class Enrollment(Base):
     class_ = relationship("Class", back_populates="enrollments")
 
 
+# 题目 ↔ 知识点 多对多关联表
+question_kps = Table(
+    "question_kps", Base.metadata,
+    Column("question_id", Integer, ForeignKey("questions.id", ondelete="CASCADE"),
+           primary_key=True),
+    Column("kp_id", Integer, ForeignKey("knowledge_points.id", ondelete="CASCADE"),
+           primary_key=True),
+)
+
+
 class Question(Base):
     __tablename__ = "questions"
     id = Column(Integer, primary_key=True)
@@ -107,6 +117,8 @@ class Question(Base):
     source = Column(SAEnum(QuestionSource, native_enum=False, length=20),
                     nullable=False, default=QuestionSource.manual)
     points = Column(Integer, default=10)
+    # 难度：basic 基础★ / advanced 进阶★★ / challenge 挑战★★★（徽章进阶门槛用）
+    difficulty = Column(String(12), nullable=False, default="basic")
     created_at = Column(DateTime, default=datetime.utcnow)
 
     class_ = relationship("Class", back_populates="questions")
@@ -114,6 +126,9 @@ class Question(Base):
     choices = relationship("Choice", back_populates="question", cascade="all, delete-orphan",
                            order_by="Choice.id")
     answers = relationship("Answer", back_populates="question", cascade="all, delete-orphan")
+    # 知识点标签（多对多）
+    kps = relationship("KnowledgePoint", secondary=question_kps,
+                       back_populates="questions")
 
 
 class Choice(Base):
@@ -139,6 +154,140 @@ class Answer(Base):
 
     student = relationship("User", back_populates="answers")
     question = relationship("Question", back_populates="answers")
+
+
+class KnowledgePoint(Base):
+    """知识点（树状：parent_id 为空 = 章节，否则为章节下的节点）。
+
+    归属教师：同一教师的所有班级共用一张知识地图；
+    预置大纲首次「加载」后可任意增删改。
+    """
+    __tablename__ = "knowledge_points"
+    id = Column(Integer, primary_key=True)
+    teacher_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    parent_id = Column(Integer, ForeignKey("knowledge_points.id", ondelete="CASCADE"),
+                       nullable=True, index=True)
+    name = Column(String(128), nullable=False)
+    description = Column(Text, default="")
+    emoji = Column(String(16), default="⭐")
+    position = Column(Integer, default=0)
+    is_preset = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    parent = relationship("KnowledgePoint", remote_side=[id],
+                          back_populates="children")
+    children = relationship(
+        "KnowledgePoint", cascade="all, delete-orphan",
+        order_by="KnowledgePoint.position", back_populates="parent")
+    questions = relationship("Question", secondary=question_kps,
+                             back_populates="kps")
+
+
+# 关卡 ↔ 试卷 多对多（一关可包含多套试卷，一套卷也可在多关复用）
+level_sets = Table(
+    "level_sets", Base.metadata,
+    Column("level_id", Integer, ForeignKey("levels.id", ondelete="CASCADE"),
+           primary_key=True),
+    Column("set_id", Integer, ForeignKey("problem_sets.id", ondelete="CASCADE"),
+           primary_key=True),
+)
+
+
+class Level(Base):
+    """闯关关卡：对应「第 N 周」。顺序解锁，包含若干试卷与知识点拼图。"""
+    __tablename__ = "levels"
+    id = Column(Integer, primary_key=True)
+    class_id = Column(Integer, ForeignKey("classes.id", ondelete="CASCADE"),
+                      nullable=False, index=True)
+    name = Column(String(128), nullable=False)          # 如「第 1 周 · 变量入门」
+    topic = Column(String(32), default="")              # 路径圆圈上的主题短名，如「Python基础」
+    description = Column(Text, default="")
+    position = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    class_ = relationship("Class", backref="levels")
+    sets = relationship("ProblemSet", secondary=level_sets)
+    kp_links = relationship("LevelKp", back_populates="level",
+                            cascade="all, delete-orphan",
+                            order_by="LevelKp.id")
+
+
+class LevelKp(Base):
+    """关卡内的知识点拼图；requirement 为教学要求：know 了解 / understand 理解 / master 掌握。"""
+    __tablename__ = "level_kps"
+    __table_args__ = (UniqueConstraint("level_id", "kp_id", name="uq_level_kp"),)
+    id = Column(Integer, primary_key=True)
+    level_id = Column(Integer, ForeignKey("levels.id", ondelete="CASCADE"),
+                      nullable=False, index=True)
+    kp_id = Column(Integer, ForeignKey("knowledge_points.id", ondelete="CASCADE"),
+                   nullable=False)
+    requirement = Column(String(16), nullable=False, default="understand")
+
+    level = relationship("Level", back_populates="kp_links")
+    kp = relationship("KnowledgePoint")
+
+
+class MasteryJudge(Base):
+    """AI 对「学生 × 知识点」掌握度的判定结果（带数据指纹缓存，有新作答才重判）。"""
+    __tablename__ = "mastery_judges"
+    __table_args__ = (UniqueConstraint("student_id", "kp_id", name="uq_student_kp_judge"),)
+    id = Column(Integer, primary_key=True)
+    student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    kp_id = Column(Integer, ForeignKey("knowledge_points.id", ondelete="CASCADE"),
+                   nullable=False, index=True)
+    verdict = Column(String(16), nullable=False, default="none")  # mastered/partial/none
+    reason = Column(Text, default="")
+    sig = Column(String(64), default="")   # 答题数据指纹，变化才重新调用 AI
+    source = Column(String(16), default="ai")  # ai / fallback（API 失败时的规则判定）
+    judged_at = Column(DateTime, default=datetime.utcnow)
+
+
+class AbilityReport(Base):
+    """错题本 AI 学情总结（按班级缓存，错题数据指纹变化才重新调用 AI）。"""
+    __tablename__ = "ability_reports"
+    __table_args__ = (UniqueConstraint("student_id", "class_id",
+                                       name="uq_student_class_report"),)
+    id = Column(Integer, primary_key=True)
+    student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    class_id = Column(Integer, ForeignKey("classes.id", ondelete="CASCADE"),
+                      nullable=False, index=True)
+    sig = Column(String(64), default="")
+    summary = Column(Text, default="")     # 总体评价
+    problems = Column(Text, default="")    # 主要问题
+    advice = Column(Text, default="")      # 改进建议
+    labels = Column(String(255), default="")  # 问题标签，逗号分隔
+    source = Column(String(16), default="ai")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class PracticeAttempt(Base):
+    """练习模式作答（区别于考试 Answer，可反复作答，不影响成绩与排行榜）。
+
+    错题本依据：考试答错的题，只要存在一条正确的 PracticeAttempt 即视为攻克。
+    """
+    __tablename__ = "practice_attempts"
+    id = Column(Integer, primary_key=True)
+    student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    question_id = Column(Integer, ForeignKey("questions.id", ondelete="CASCADE"),
+                         nullable=False, index=True)
+    choice_id = Column(Integer, ForeignKey("choices.id", ondelete="SET NULL"))
+    is_correct = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class StudentAchievement(Base):
+    """学生成就徽章解锁记录（code 对应 app/badges.py 的 9 枚固定徽章）。"""
+    __tablename__ = "student_achievements"
+    __table_args__ = (UniqueConstraint("student_id", "code", name="uq_student_badge"),)
+    id = Column(Integer, primary_key=True)
+    student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    code = Column(String(32), nullable=False)
+    unlocked_at = Column(DateTime, default=datetime.utcnow)
 
 
 # —— 排行榜查询辅助 ——

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}题目标签{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto">
+  <a href="/teacher/classes/{{ cls.id }}/sets/{{ q.set_id }}" class="text-sm text-slate-400 hover:text-candy-400">← 返回试卷</a>
+
+  <div class="bg-white/85 rounded-4xl p-8 shadow-xl mt-2">
+    <h1 class="text-2xl font-extrabold text-candy-500 mb-2">🏷️ 管理知识点标签</h1>
+    <div class="bg-candy-50/60 rounded-2xl p-4 mb-6">
+      <span class="text-xs font-bold px-2 py-0.5 rounded-full {{ 'bg-candy-100 text-candy-500' if q.q_type.value == 'mc' else 'bg-sky-100 text-sky2-500' }}">
+        {{ '选择题' if q.q_type.value == 'mc' else '判断题' }}
+      </span>
+      <p class="font-bold text-slate-700 mt-2">{{ q.stem }}</p>
+    </div>
+
+    {% if chapters %}
+    <form method="post" action="/teacher/classes/{{ cls.id }}/questions/{{ q.id }}/tags" class="space-y-4">
+      <div>
+        <label class="block text-sm font-bold text-slate-500 mb-1">题目难度（用于徽章进阶评定）</label>
+        <select name="difficulty" class="w-full px-4 py-3 rounded-2xl border-2 border-candy-100 focus:border-candy-400 outline-none bg-candy-50/50 font-bold">
+          <option value="basic" {% if q.difficulty == 'basic' %}selected{% endif %}>★ 基础（概念/语法直接应用）</option>
+          <option value="advanced" {% if q.difficulty == 'advanced' %}selected{% endif %}>★★ 进阶（多步骤、组合运用）</option>
+          <option value="challenge" {% if q.difficulty == 'challenge' %}selected{% endif %}>★★★ 挑战（综合、真实场景）</option>
+        </select>
+      </div>
+      {% for ch in chapters %}
+      <div>
+        <div class="text-sm font-extrabold text-slate-500 mb-2">{{ ch.emoji }} {{ ch.name }}</div>
+        <div class="flex flex-wrap gap-2">
+          {% for kp in ch.children %}
+          <label class="inline-flex items-center gap-1 px-3 py-1.5 rounded-full border-2 cursor-pointer transition
+            {% if kp.id in tagged_ids %}bg-green-100 border-green-300 text-green-600 font-bold
+            {% else %}bg-white border-candy-100 text-slate-500 hover:border-candy-300{% endif %}">
+            <input type="checkbox" name="kp_ids" value="{{ kp.id }}"
+                   {% if kp.id in tagged_ids %}checked{% endif %} class="accent-green-500 w-4 h-4">
+            {{ kp.emoji }} {{ kp.name }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+      <button class="w-full py-3 rounded-2xl bg-candy-400 text-white font-extrabold text-lg shadow-lg hover:bg-candy-500 hover:scale-[1.02] transition transform">
+        💾 保存标签
+      </button>
+    </form>
+    {% else %}
+    <div class="text-center py-8">
+      <p class="text-slate-400 mb-4">还没有知识点大纲</p>
+      <a href="/teacher/knowledge" class="inline-block px-6 py-3 rounded-4xl bg-candy-400 text-white font-bold">🌟 去加载预置大纲</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

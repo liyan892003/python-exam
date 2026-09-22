@@ -1,9 +1,12 @@
 {% extends "base.html" %}
 {% block title %}教师中心{% endblock %}
 {% block content %}
-<div class="flex items-center justify-between mb-6">
+<div class="flex items-center justify-between mb-6 gap-3 flex-wrap">
   <h1 class="text-3xl font-extrabold text-candy-500">👩‍🏫 我的班级</h1>
-  <a href="/teacher/classes/new" class="px-5 py-3 rounded-4xl bg-candy-400 text-white font-bold shadow-lg hover:bg-candy-500 hover:scale-105 transition transform">➕ 创建新班级</a>
+  <div class="flex gap-2">
+    <a href="/teacher/knowledge" class="px-5 py-3 rounded-4xl bg-green-100 text-green-600 font-bold shadow hover:bg-green-200 hover:scale-105 transition transform">🗺️ 知识点管理</a>
+    <a href="/teacher/classes/new" class="px-5 py-3 rounded-4xl bg-candy-400 text-white font-bold shadow-lg hover:bg-candy-500 hover:scale-105 transition transform">➕ 创建新班级</a>
+  </div>
 </div>
 
 {% if stats %}

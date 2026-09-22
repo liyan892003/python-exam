@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}{{ lv.name }}{% endblock %}
+{% block content %}
+<script src="/static/lib/canvas-confetti.min.js"></script>
+<style>
+  @keyframes riseIn { from{opacity:0;transform:translateY(24px) scale(.85)} to{opacity:1;transform:none} }
+  .rise { animation: riseIn .5s cubic-bezier(.34,1.56,.64,1) both; }
+</style>
+
+<div class="w-full max-w-[1200px] mx-auto px-3 sm:px-8">
+  <a href="/student/classes/{{ cls.id }}" class="text-sm text-slate-400 hover:text-candy-400">← 返回闯关之路</a>
+
+  <div class="bg-white/85 rounded-3xl p-4 sm:p-5 shadow-xl mt-2 mb-6 flex flex-wrap items-center gap-x-5 gap-y-2">
+    <h1 class="text-xl sm:text-2xl font-extrabold text-amber-500">🚩 {{ lv.name }}{% if lv.topic %} · {{ lv.topic }}{% endif %}</h1>
+    <div class="inline-flex items-center gap-2 text-sm font-bold text-slate-500 bg-amber-50 rounded-full px-4 py-1.5">
+      📝 答题 {{ prog.n_done }}/{{ prog.n_total }}
+      {% if prog.complete %}<span class="text-green-500">· 已通关 🎉</span>{% endif %}
+    </div>
+    {% if lv.description %}
+    <p class="w-full text-sm text-slate-500 whitespace-pre-line leading-relaxed">{{ lv.description }}</p>{% endif %}
+  </div>
+
+  <div class="grid lg:grid-cols-2 gap-6 items-start">
+    <!-- 本关任务 -->
+    <section class="bg-white/70 rounded-3xl p-4 sm:p-5">
+      <h2 class="text-lg font-extrabold text-slate-600 mb-3">📝 本关任务</h2>
+      <div class="space-y-2">
+        {% for it in set_items %}
+        <a href="/student/classes/{{ cls.id }}/sets/{{ it.set.id }}/start"
+           class="flex items-center gap-3 bg-white rounded-2xl p-3.5 shadow-sm hover:scale-[1.01] transition transform">
+          <span class="text-2xl">{% if it.complete %}✅{% else %}📝{% endif %}</span>
+          <span class="flex-1 font-bold text-slate-700 text-sm">{{ it.set.name }}</span>
+          <span class="text-sm font-extrabold text-candy-400">{{ it.n_done }}/{{ it.n_total }}</span>
+        </a>
+        {% else %}
+        <p class="text-sm text-slate-400">老师还没给本关挂试卷。</p>
+        {% endfor %}
+      </div>
+    </section>
+
+    <!-- 本关知识点进度（AI 评判） -->
+    <section class="bg-white/70 rounded-3xl p-4 sm:p-5">
+      <h2 class="text-lg font-extrabold text-slate-600 mb-3">📊 知识点掌握情况</h2>
+      {% if puzzles %}
+      <div class="space-y-2">
+        {% for p in puzzles %}
+        {% set kp_url = "/student/classes/" + cls.id|string + "/knowledge/" + p.kp.id|string + "?from=level&lid=" + lv.id|string %}
+        <a href="{{ kp_url }}"
+           class="rise block bg-white rounded-2xl px-4 py-2.5 shadow-sm flex items-center gap-3 hover:bg-amber-50/50 transition"
+           style="animation-delay: {{ loop.index0 * 50 }}ms">
+          <span class="w-2.5 h-2.5 rounded-full shrink-0
+            {% if p.state == 'lit' %}bg-green-400{% elif p.state == 'half' %}bg-amber-400{% else %}bg-slate-300{% endif %}"></span>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="font-extrabold text-sm
+                {% if p.state == 'lit' %}text-green-600{% elif p.state == 'half' %}text-amber-500{% else %}text-slate-500{% endif %}">
+                {{ p.kp.emoji }} {{ p.kp.name }}</span>
+              {% if p.lk.requirement == 'know' %}
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-600">了解</span>
+              {% elif p.lk.requirement == 'master' %}
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-500">掌握</span>
+              {% else %}
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-600">理解</span>
+              {% endif %}
+            </div>
+            {% if p.reason %}<p class="text-[11px] text-slate-400 truncate">🤖 {{ p.reason }}</p>{% endif %}
+          </div>
+          <div class="shrink-0 text-right">
+            {% if p.state == 'lit' %}<span class="text-xs font-extrabold text-green-500">✨ 已掌握</span>
+            {% elif p.state == 'half' %}<span class="text-xs font-extrabold text-amber-500">🌗 差一点</span>
+            {% elif p.n_q %}
+            <span class="text-xs font-bold text-candy-400">去练习 →</span>
+            {% else %}<span class="text-[10px] text-slate-300">暂无题</span>{% endif %}
+          </div>
+        </a>
+        {% endfor %}
+      </div>
+      <p class="text-[11px] text-slate-400 mt-3">点击任一知识点可查看相关题目并练习；答完本关题目后，AI 助教会根据作答记录评判掌握情况。</p>
+      {% else %}
+      <p class="text-sm text-slate-400">老师还没给本关配置知识点。</p>
+      {% endif %}
+    </section>
+  </div>
+</div>
+
+{% if n_lit == n_pieces and n_pieces > 0 %}
+<script>
+// 本关知识点全部掌握：单次小庆祝
+confetti({particleCount: 90, spread: 80, startVelocity: 35,
+  colors:['#7dd3fc','#fcd34d','#fda4af','#86efac','#c4b5fd']});
+</script>
+{% endif %}
+{% endblock %}
