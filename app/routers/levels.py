@@ -8,16 +8,21 @@
     仅 verdict=mastered 点亮，partial 半亮；API 失败自动降级规则判定。
 """
 import hashlib
+import threading
 
 from fastapi import APIRouter, Depends, Request, Response, Form, HTTPException
 from sqlalchemy.orm import Session
 
-from ..db import get_db
+from ..db import SessionLocal, get_db
 from ..deps import templates, require_role
 from ..models import (User, Class, Enrollment, ProblemSet, Question, Choice,
                       Answer, KnowledgePoint, Level, LevelKp, MasteryJudge,
                       PracticeAttempt, question_kps, Role)
 from ..ai import judge_mastery
+
+# 正在后台 AI 判定中的 (student_id, kp_id)，去重防止重复触发
+_judging_lock = threading.Lock()
+_judging: set[tuple[int, int]] = set()
 
 t_router = APIRouter(prefix="/teacher/classes", tags=["teacher-levels"])
 teacher_dep = require_role(Role.teacher)
@@ -176,8 +181,43 @@ def _records_sig(records: list[dict]) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()[:32]
 
 
+def _do_judge_background(student_id: int, kp_id: int, kp_name: str,
+                         requirement: str, sig: str,
+                         records: list[dict], n_total: int) -> None:
+    """后台线程：调用 AI 判定并写库，失败也不影响主请求。"""
+    key = (student_id, kp_id)
+    try:
+        res = judge_mastery(kp_name, requirement, records, n_total=n_total)
+        # 硬闸门：理解/掌握级至少答过 2 题，否则 AI 不能判 mastered
+        need = min(2, n_total)
+        if res["verdict"] == "mastered" and len(records) < need:
+            res["verdict"] = "partial"
+            res["reason"] = f"只做了 {len(records)}/{n_total} 题，再多练几道确认掌握"
+        db = SessionLocal()
+        try:
+            judge = db.query(MasteryJudge).filter(
+                MasteryJudge.student_id == student_id,
+                MasteryJudge.kp_id == kp_id).first()
+            if not judge:
+                judge = MasteryJudge(student_id=student_id, kp_id=kp_id)
+                db.add(judge)
+            judge.verdict = res["verdict"]
+            judge.reason = res["reason"]
+            judge.source = res["source"]
+            judge.sig = sig
+            db.commit()
+        finally:
+            db.close()
+    except Exception:
+        pass  # 静默失败，下次请求会再次触发
+    finally:
+        with _judging_lock:
+            _judging.discard(key)
+
+
 def judge_level_puzzles(db: Session, cid: int, user: User, level: Level) -> list[dict]:
-    """进关卡页：对每个拼图按需判定（有新数据才调 AI），返回拼图视图。"""
+    """进关卡页：对每个拼图按需判定。AI 判定在后台线程异步执行，
+    未就绪时先返回 dark +「分析中」，避免并发下阻塞请求导致崩溃。"""
     out = []
     for lk in level.kp_links:
         kp = lk.kp
@@ -185,31 +225,31 @@ def judge_level_puzzles(db: Session, cid: int, user: User, level: Level) -> list
         records = _kp_records(db, user.id, questions)
         sig = _records_sig(records)
         verdict, reason, source = None, "", ""
+        pending = False
         if lk.requirement in ("understand", "master") and records:
             judge = db.query(MasteryJudge).filter(
                 MasteryJudge.student_id == user.id,
                 MasteryJudge.kp_id == kp.id).first()
-            if not judge or judge.sig != sig:
-                res = judge_mastery(kp.name, lk.requirement, records,
-                                    n_total=len(questions))
-                # 硬闸门：理解/掌握级至少答过 2 题（题池不足 2 题则答完全部），
-                # 否则 AI 也不能判 mastered——防止只做对 1 题就点亮。
-                need = min(2, len(questions))
-                if res["verdict"] == "mastered" and len(records) < need:
-                    res["verdict"] = "partial"
-                    res["reason"] = f"只做了 {len(records)}/{len(questions)} 题，再多练几道确认掌握"
-                if not judge:
-                    judge = MasteryJudge(student_id=user.id, kp_id=kp.id)
-                    db.add(judge)
-                judge.verdict = res["verdict"]
-                judge.reason = res["reason"]
-                judge.source = res["source"]
-                judge.sig = sig
-                db.commit()
-            verdict, reason, source = judge.verdict, judge.reason, judge.source
+            if judge and judge.sig == sig:
+                verdict, reason, source = judge.verdict, judge.reason, judge.source
+            else:
+                # 需要重新判定：丢给后台线程，本次返回「分析中」
+                key = (user.id, kp.id)
+                with _judging_lock:
+                    if key not in _judging:
+                        _judging.add(key)
+                        threading.Thread(
+                            target=_do_judge_background,
+                            args=(user.id, kp.id, kp.name, lk.requirement,
+                                  sig, records, len(questions)),
+                            daemon=True).start()
+                pending = True
         attempted = len(records)
         if lk.requirement == "know":
             state = "lit" if attempted else "dark"
+        elif pending:
+            state = "dark"
+            reason = "AI 分析中，刷新页面查看结果"
         elif verdict == "mastered":
             state = "lit"
         elif verdict == "partial":

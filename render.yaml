@@ -16,7 +16,7 @@ services:
     plan: free                 # 15 分钟无流量休眠，上课前访问一次即可唤醒
     region: singapore
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 2 --timeout-keep-alive 30
     healthCheckPath: /health
     envVars:
       - key: APP_ENV

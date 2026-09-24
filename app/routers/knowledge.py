@@ -254,6 +254,25 @@ async def knowledge_map(cid: int, request: Request,
                 .filter(KnowledgePoint.teacher_id == cls.teacher_id,
                         KnowledgePoint.parent_id.is_(None))
                 .order_by(KnowledgePoint.position, KnowledgePoint.id).all())
+    # 批量查询：一次拿到该班级所有题的 kp 关联，避免每个知识点单独查（N+1）
+    kp_qids: dict[int, list[int]] = {}
+    rows = (db.query(question_kps.c.kp_id, Question.id)
+            .join(Question, Question.id == question_kps.c.question_id)
+            .filter(Question.class_id == cid).all())
+    for kp_id, qid in rows:
+        kp_qids.setdefault(kp_id, []).append(qid)
+    all_qids = list({qid for qids in kp_qids.values() for qid in qids})
+    # 一次拿到该学生在这些题上的所有练习记录
+    att_rows = db.query(PracticeAttempt.question_id, PracticeAttempt.is_correct).filter(
+        PracticeAttempt.student_id == user.id,
+        PracticeAttempt.question_id.in_(all_qids)).all() if all_qids else []
+    attempted_map: dict[int, set[int]] = {}
+    correct_map: dict[int, set[int]] = {}
+    for qid, ok in att_rows:
+        attempted_map.setdefault(qid, set()).add(qid)
+        if ok:
+            correct_map.setdefault(qid, set()).add(qid)
+
     total_leaf = 0
     total_stars = 0
     view = []
@@ -261,12 +280,20 @@ async def knowledge_map(cid: int, request: Request,
         nodes = []
         for kp in ch.children:
             total_leaf += 1
-            pool = _class_kp_questions(db, cid, kp.id)
-            n_attempted, n_correct, _ = _attempt_stats(
-                db, user.id, [q.id for q in pool])
+            qids = kp_qids.get(kp.id, [])
+            n_q = len(qids)
+            attempted = set()
+            correct = set()
+            for q in qids:
+                if q in attempted_map:
+                    attempted.add(q)
+                if q in correct_map:
+                    correct.add(q)
+            n_attempted = len(attempted)
+            n_correct = len(correct)
             stars = kp_stars(n_attempted, n_correct)
             total_stars += stars
-            nodes.append({"kp": kp, "stars": stars, "n_q": len(pool),
+            nodes.append({"kp": kp, "stars": stars, "n_q": n_q,
                           "n_attempted": n_attempted, "n_correct": n_correct})
         view.append({"chapter": ch, "nodes": nodes,
                      "n_stars": sum(n["stars"] for n in nodes)})

@@ -9,7 +9,11 @@ settings = get_settings()
 _is_sqlite = settings.DATABASE_URL.startswith("sqlite")
 # SQLite 需要 check_same_thread=False（FastAPI 多线程）
 connect_args = {"check_same_thread": False} if _is_sqlite else {}
-engine = create_engine(settings.DATABASE_URL, connect_args=connect_args, pool_pre_ping=True)
+# Postgres 设连接池，避免并发下连接耗尽（Render basic 数据库默认 max_connections 有限）
+engine_kwargs = {"pool_pre_ping": True}
+if not _is_sqlite:
+    engine_kwargs.update(pool_size=8, max_overflow=4, pool_recycle=300)
+engine = create_engine(settings.DATABASE_URL, connect_args=connect_args, **engine_kwargs)
 
 if _is_sqlite:
     # SQLite 默认不强制外键，开启后 ondelete=CASCADE 才与 Postgres 行为一致
