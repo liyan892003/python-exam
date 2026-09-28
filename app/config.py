@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./dev.db"
     DEEPSEEK_API_KEY: str = ""
     DEEPSEEK_MODEL: str = "deepseek-chat"
+    # 忘记密码自助重置密钥：设置后，/forgot 页可用「学号+密钥」重置任意账号密码；
+    # 留空则关闭该通道（学生找老师重置，老师用此密钥自救）
+    PASSWORD_RESET_KEY: str = ""
 
     @property
     def is_prod(self) -> bool:

@@ -33,3 +33,5 @@ services:
         sync: false              # 部署后在 Dashboard 手动填（AI 出题用）
       - key: DEEPSEEK_MODEL
         value: deepseek-chat
+      - key: PASSWORD_RESET_KEY
+        sync: false              # 部署后在 Dashboard 手动填（忘记密码自助重置密钥，留空则关闭）

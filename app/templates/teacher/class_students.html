@@ -7,6 +7,12 @@
   <p class="text-slate-400 text-sm mt-1">共 {{ rows|length }} 位学生。点「📋 详情」查看单生答题记录；移除学生将删除其答题记录并从排行榜消失。</p>
 </div>
 
+{% if request.query_params.get('reset') %}
+<div class="bg-green-50 border-2 border-green-200 text-green-600 px-4 py-3 rounded-2xl mb-4 text-sm font-bold">
+  ✅ 已重置 <span class="font-mono">{{ request.query_params.get('reset') }}</span> 的密码，请把新密码告知该学生。
+</div>
+{% endif %}
+
 <div class="flex flex-wrap gap-3 mb-4">
   <a href="/teacher/classes/{{ cls.id }}/students/export"
      class="px-5 py-3 rounded-4xl bg-green-100 text-green-600 font-bold shadow hover:bg-green-200 hover:scale-105 transition transform">
@@ -44,6 +50,11 @@
     <div class="col-span-12 md:col-span-2 flex gap-1 justify-end">
       <a href="/teacher/classes/{{ cls.id }}/students/{{ r.user.id }}"
          class="px-2 py-1 rounded-xl bg-candy-100 text-candy-500 text-xs font-bold hover:bg-candy-200 transition">📋 详情</a>
+      <form method="post" action="/teacher/classes/{{ cls.id }}/students/{{ r.user.id }}/reset-password"
+            onsubmit="var p=prompt('给「{{ r.user.username }}」设置新密码（点确定留空则重置为默认密码 pass1234）：','');if(p===null)return false;if(p.trim()&&p.trim().length<6){alert('密码至少 6 位');return false;}this.querySelector('input[name=new_password]').value=p.trim();return true;">
+        <input type="hidden" name="new_password" value="">
+        <button class="px-2 py-1 rounded-xl bg-amber-100 text-amber-600 text-xs font-bold hover:bg-amber-200 transition">🔑 重置密码</button>
+      </form>
       <form method="post" action="/teacher/classes/{{ cls.id }}/students/{{ r.user.id }}/remove"
             onsubmit="return confirm('确定移除「{{ r.user.username }}」？\n该学生在本班的所有答题记录将被删除，排行榜将不再显示该学生。');">
         <button class="px-2 py-1 rounded-xl bg-red-50 text-red-400 text-xs font-bold hover:bg-red-100 transition">🗑️ 移除</button>

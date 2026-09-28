@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..deps import templates, require_role
+from ..security import hash_password
 from ..models import (User, Class, ProblemSet, Question, Choice, Enrollment, Answer,
                       KnowledgePoint, QType, QuestionSource, Role, class_leaderboard)
 
@@ -402,6 +403,34 @@ async def remove_student(cid: int, uid: int,
     ).delete(synchronize_session=False)
     db.commit()
     return Response(status_code=303, headers={"Location": f"/teacher/classes/{cid}/students"})
+
+
+# —— 重置学生密码（学生忘记密码时由教师操作） ——
+
+DEFAULT_STUDENT_PASSWORD = "pass1234"
+
+
+@router.post("/classes/{cid}/students/{uid}/reset-password")
+async def reset_student_password(cid: int, uid: int,
+                                 new_password: str = Form(""),
+                                 user: User = Depends(teacher_dep),
+                                 db: Session = Depends(get_db)):
+    _get_owned_class(db, cid, user)  # 校验班级归属
+    enrolled = db.query(Enrollment).filter(
+        Enrollment.class_id == cid, Enrollment.student_id == uid).first()
+    if not enrolled:
+        raise HTTPException(404, "该学生不在本班级")
+    student = db.query(User).filter(User.id == uid, User.role == Role.student).first()
+    if not student:
+        raise HTTPException(404, "学生不存在")
+    pwd = new_password.strip() or DEFAULT_STUDENT_PASSWORD
+    if len(pwd) < 6:
+        raise HTTPException(400, "密码至少 6 位")
+    student.password_hash = hash_password(pwd)
+    db.commit()
+    # 带回显参数跳回学生管理页，页面顶部显示提示
+    return Response(status_code=303, headers={
+        "Location": f"/teacher/classes/{cid}/students?reset={student.email}"})
 
 
 # —— 导出全班学生汇总 CSV ——
