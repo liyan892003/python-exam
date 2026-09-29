@@ -50,9 +50,8 @@
       </button>
     </form>
     {% else %}
-    <div class="bg-candy-50 rounded-2xl p-5 text-sm text-slate-500 leading-relaxed space-y-3">
-      <p><b class="text-candy-500">🎒 学生：</b>请联系你的老师，老师可以在「学生管理」页一键帮你把密码重置为默认密码。</p>
-      <p><b class="text-candy-500">👩‍🏫 老师：</b>自助重置需要先在 Render 环境变量中设置 <code class="font-mono bg-slate-100 px-1 rounded">PASSWORD_RESET_KEY</code>（自定义一串只有你知道的密钥），设置后回到本页用「学号 + 密钥」重置任意账号的密码。</p>
+    <div class="bg-candy-50 rounded-2xl p-5 text-sm text-slate-500 leading-relaxed">
+      <p>请联系你的老师，老师可以在班级「学生管理」页一键帮你重置密码。</p>
     </div>
     {% endif %}
     {% endif %}
