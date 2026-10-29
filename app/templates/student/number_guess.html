@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}猜数字挑战{% endblock %}
+{% block content %}
+<div class="mb-6">
+  <a href="/student/games" class="text-sm text-slate-400 hover:text-candy-400">← 返回游戏区</a>
+  <div class="flex items-center justify-between mt-2 gap-3 flex-wrap">
+    <div>
+      <h1 class="text-3xl font-extrabold text-candy-500">🎯 猜数字挑战</h1>
+      <p class="text-slate-400 text-sm">我想了一个 1 ~ 100 之间的整数，猜猜看是多少？</p>
+    </div>
+    <div class="text-center bg-amber-50 rounded-4xl px-5 py-3 border-4 border-dashed border-amber-200">
+      <div class="text-xs text-slate-400 mb-1">最佳记录</div>
+      <div id="stat-best" class="text-2xl font-extrabold text-amber-500">—</div>
+    </div>
+  </div>
+</div>
+
+<div class="bg-white/85 rounded-4xl p-6 shadow-md border-4 border-dashed border-candy-200 max-w-2xl mx-auto">
+  <div class="grid grid-cols-2 gap-3 mb-5">
+    <div class="bg-sky-50 rounded-2xl p-3 text-center">
+      <div class="text-xs text-slate-400">当前范围</div>
+      <div id="stat-range" class="text-2xl font-extrabold text-sky2-500">1 ~ 100</div>
+    </div>
+    <div class="bg-slate-50 rounded-2xl p-3 text-center">
+      <div class="text-xs text-slate-400">已猜次数</div>
+      <div id="stat-tries" class="text-2xl font-extrabold text-slate-600">0</div>
+    </div>
+  </div>
+
+  <div class="flex flex-col sm:flex-row gap-3">
+    <input id="guess-input" type="number" inputmode="numeric" placeholder="输入你的猜测"
+           class="flex-1 px-4 py-3 rounded-2xl border-2 border-candy-200 focus:border-candy-400 outline-none transition bg-white text-center text-2xl font-extrabold text-slate-700 disabled:bg-slate-50 disabled:text-slate-300">
+    <button id="btn-guess"
+            class="px-6 py-3 rounded-2xl bg-candy-400 text-white font-bold shadow-lg hover:bg-candy-500 hover:scale-105 transition transform whitespace-nowrap disabled:opacity-40 disabled:hover:scale-100">
+      猜！
+    </button>
+  </div>
+  <div id="feedback" class="mt-4 text-center text-xl font-extrabold h-8"></div>
+
+  <div class="mt-4">
+    <h3 class="font-extrabold text-slate-600 mb-2">📝 猜测记录</h3>
+    <div id="history" class="space-y-2 max-h-60 overflow-y-auto bg-slate-50/70 rounded-2xl p-3"></div>
+  </div>
+
+  <div class="mt-5 text-center">
+    <button id="btn-again"
+            class="px-6 py-3 rounded-2xl bg-candy-100 text-candy-600 font-bold hover:bg-candy-200 transition">
+      🔄 换一个数重新开始
+    </button>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const $ = (id) => document.getElementById(id);
+  const BEST_KEY = 'number_guess_best';
+
+  const s = { target: 0, lo: 1, hi: 100, tries: 0, log: [], over: false, newBest: false };
+
+  function loadBest() {
+    try {
+      const v = Number(localStorage.getItem(BEST_KEY));
+      return v > 0 ? v : null;
+    } catch (e) { return null; }
+  }
+
+  function saveBest(n) {
+    const cur = loadBest();
+    const isNew = (cur === null || n < cur);
+    if (isNew) {
+      try { localStorage.setItem(BEST_KEY, String(n)); } catch (e) { /* 隐私模式忽略 */ }
+    }
+    return isNew;
+  }
+
+  function newGame() {
+    s.target = Math.floor(Math.random() * 100) + 1;   // 1 ~ 100
+    s.lo = 1;
+    s.hi = 100;
+    s.tries = 0;
+    s.log = [];
+    s.over = false;
+    s.newBest = false;
+    setFeedback('', '');
+    render();
+    focusInput();
+  }
+
+  function focusInput() {
+    const el = $('guess-input');
+    el.value = '';
+    el.focus();
+  }
+
+  function setFeedback(text, colorCls) {
+    const fb = $('feedback');
+    fb.textContent = text;
+    fb.className = 'mt-4 text-center text-xl font-extrabold h-8 ' + (colorCls || '');
+  }
+
+  function submit() {
+    if (s.over) return;
+    const input = $('guess-input');
+    const raw = input.value.trim();
+    if (raw === '') { setFeedback('⚠️ 请先输入一个数字', 'text-amber-500'); input.focus(); return; }
+    const g = Number(raw);
+    if (!Number.isInteger(g)) { setFeedback('⚠️ 请输入整数', 'text-amber-500'); input.focus(); return; }
+    if (g < s.lo || g > s.hi) {
+      setFeedback(`⚠️ 请输入 ${s.lo} ~ ${s.hi} 之间的数字`, 'text-amber-500');
+      input.focus();
+      return;
+    }
+
+    s.tries += 1;
+
+    if (g === s.target) {
+      s.log.push({ g: g, result: 'win' });
+      s.over = true;
+      s.newBest = saveBest(s.tries);
+      render();
+      setFeedback(`🎉 猜中啦！答案就是 ${g}，你用了 ${s.tries} 次`, 'text-green-500');
+      confettiBurst();
+      return;
+    }
+
+    if (g > s.target) {
+      s.hi = g - 1;
+      s.log.push({ g: g, result: 'high' });
+      setFeedback(`太大了！范围缩小到 ${s.lo} ~ ${s.hi}`, 'text-red-400');
+    } else {
+      s.lo = g + 1;
+      s.log.push({ g: g, result: 'low' });
+      setFeedback(`太小了！范围缩小到 ${s.lo} ~ ${s.hi}`, 'text-sky-500');
+    }
+    render();
+    focusInput();
+  }
+
+  function render() {
+    $('stat-range').textContent = `${s.lo} ~ ${s.hi}`;
+    $('stat-tries').textContent = s.tries;
+
+    const best = loadBest();
+    $('stat-best').textContent = best === null ? '—' : (best + ' 次' + (s.newBest ? ' 🎉' : ''));
+
+    const input = $('guess-input');
+    input.min = s.lo;
+    input.max = s.hi;
+    input.placeholder = `${s.lo} ~ ${s.hi}`;
+    input.disabled = s.over;
+    $('btn-guess').disabled = s.over;
+
+    const box = $('history');
+    if (!s.log.length) {
+      box.innerHTML = '<p class="text-sm text-slate-400">还没有猜测记录</p>';
+      return;
+    }
+    const color = { high: 'text-red-400', low: 'text-sky-500', win: 'text-green-500' };
+    const tail = { high: '太大 ↓', low: '太小 ↑', win: '🎉 猜中！' };
+    box.innerHTML = s.log.map((e, i) => `
+      <div class="flex items-center justify-between gap-2 text-sm bg-white rounded-xl px-3 py-1.5">
+        <span class="text-xs text-slate-400">第 ${i + 1} 次</span>
+        <span><b class="text-candy-500">${e.g}</b>
+          <span class="${color[e.result]}">${tail[e.result]}</span></span>
+      </div>`).join('');
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function confettiBurst() {
+    if (typeof confetti !== 'function') return;
+    confetti({ particleCount: 160, spread: 90, origin: { y: 0.6 } });
+    setTimeout(() => confetti({ particleCount: 80, angle: 60, spread: 70, origin: { x: 0 } }), 200);
+    setTimeout(() => confetti({ particleCount: 80, angle: 120, spread: 70, origin: { x: 1 } }), 350);
+  }
+
+  $('btn-guess').addEventListener('click', submit);
+  $('btn-again').addEventListener('click', newGame);
+  $('guess-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+
+  newGame();
+</script>
+{% endblock %}

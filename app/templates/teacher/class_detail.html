@@ -16,6 +16,22 @@
   </div>
 </div>
 
+<!-- 课堂小游戏：猜数字 -->
+<div class="bg-gradient-to-r from-violet-50 to-candy-50 rounded-4xl p-6 shadow-md mb-6 border-4 border-dashed border-violet-200">
+  <div class="flex items-center justify-between gap-4 flex-wrap">
+    <div>
+      <h2 class="text-xl font-extrabold text-violet-600 mb-1 flex items-center gap-2">🎯 课堂小游戏 · 猜数字</h2>
+      <p class="text-xs text-slate-400">建一局游戏，学生用自己账号加入，按顺序轮流猜 1~100，猜中缩小范围，保证人人轮到一次。</p>
+    </div>
+    <form method="post" action="/teacher/classes/{{ cls.id }}/games/number-guess/create">
+      <button type="submit"
+              class="px-6 py-3 rounded-2xl bg-violet-400 text-white font-bold shadow-lg hover:bg-violet-500 hover:scale-105 transition transform whitespace-nowrap">
+        🎮 创建游戏
+      </button>
+    </form>
+  </div>
+</div>
+
 <!-- 新建试卷 -->
 <div class="bg-white/85 rounded-4xl p-6 shadow-md mb-6 border-4 border-dashed border-candy-200">
   <h2 class="text-xl font-extrabold text-candy-500 mb-3 flex items-center gap-2">📑 新建一套试卷</h2>

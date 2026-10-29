@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..deps import templates, get_current_user
 from ..models import User, Role
-from ..security import hash_password, verify_password
+from ..security import hash_password_async, verify_password_async
 from ..schemas import RegisterIn, LoginIn
 from ..config import get_settings
 
@@ -51,7 +51,7 @@ async def register(
 
     user = User(
         username=data.username, email=data.email,
-        password_hash=hash_password(data.password),
+        password_hash=await hash_password_async(data.password),
         role=Role(data.role),
     )
     db.add(user)
@@ -78,7 +78,18 @@ async def login(
     db: Session = Depends(get_db),
 ):
     user = db.query(User).filter(User.email == email).first()
-    if not user or not verify_password(password, user.password_hash):
+    if user is None:
+        return templates.TemplateResponse(
+            request, "auth/login.html",
+            {"error": "学号/工号或密码错误"}, status_code=400)
+    # ⚠️ 关键：bcrypt 校验是 CPU 密集的同步调用（约 0.2s）。Session 从 db.query
+    # 起就一直占着连接池里的一条连接，若在此 await 期间不归还，40 人同时登录会把
+    # 连接池（size 5 + overflow 10 = 15）占满；而 async 路由里「取连接」是阻塞调用，
+    # 会直接冻住事件循环 -> 连 /health 都无响应 -> Render 判定不健康后重启（502/503）。
+    # 先取出需要的字段并 close（归还连接），再去做 bcrypt。
+    pwd_hash = user.password_hash
+    db.close()
+    if not await verify_password_async(password, pwd_hash):
         return templates.TemplateResponse(
             request, "auth/login.html",
             {"error": "学号/工号或密码错误"}, status_code=400)
@@ -107,7 +118,7 @@ async def change_password(request: Request,
                           confirm: str = Form(...),
                           user: User = Depends(get_current_user),
                           db: Session = Depends(get_db)):
-    if not verify_password(old_password, user.password_hash):
+    if not await verify_password_async(old_password, user.password_hash):
         return templates.TemplateResponse(
             request, "auth/password.html",
             {"user": user, "error": "当前密码不正确", "ok": False}, status_code=400)
@@ -123,7 +134,7 @@ async def change_password(request: Request,
         return templates.TemplateResponse(
             request, "auth/password.html",
             {"user": user, "error": "新密码不能和当前密码一样", "ok": False}, status_code=400)
-    user.password_hash = hash_password(new_password)
+    user.password_hash = await hash_password_async(new_password)
     db.commit()
     return templates.TemplateResponse(request, "auth/password.html",
                                      {"user": user, "error": None, "ok": True})
@@ -201,7 +212,7 @@ async def forgot_reset(request: Request,
             request, "auth/forgot.html",
             {"error": "两次输入的新密码不一致", "ok_user": None, "key_enabled": True},
             status_code=400)
-    user.password_hash = hash_password(new_password)
+    user.password_hash = await hash_password_async(new_password)
     db.commit()
     _forgot_failures.pop(client_ip, None)  # 成功后清零
     return templates.TemplateResponse(request, "auth/forgot.html", {

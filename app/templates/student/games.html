@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}游戏区{% endblock %}
+{% block content %}
+<div class="mb-6">
+  <a href="/student" class="text-sm text-slate-400 hover:text-candy-400">← 返回学生中心</a>
+  <div class="mt-2">
+    <h1 class="text-3xl font-extrabold text-candy-500">🎮 游戏区</h1>
+    <p class="text-slate-400 text-sm">课堂游戏 + 课间小游戏，来玩吧</p>
+  </div>
+</div>
+
+<!-- 课堂游戏：进行中 -->
+{% if games %}
+<div class="mb-6">
+  <h2 class="font-extrabold text-slate-600 mb-3">📣 老师发起的课堂游戏</h2>
+  <div class="space-y-3">
+    {% for g in games %}
+    <a href="/student/games/sessions/{{ g.session.id }}"
+       class="block bg-gradient-to-r from-amber-50 to-candy-50 rounded-4xl p-5 shadow-md border-4 border-dashed border-amber-200 hover:scale-[1.01] transition transform">
+      <div class="flex items-center justify-between gap-3">
+        <div class="min-w-0">
+          <h3 class="text-lg font-extrabold text-violet-600 mb-1">🎯 猜数字 · {{ g.cls.name }}</h3>
+          <p class="text-xs text-slate-400">
+            {% if g.session.status.value == 'lobby' %}
+              {% if g.joined %}你已加入，等老师开始～{% else %}还没开始，点进去加入吧{% endif %}
+            {% else %}
+              正在进行中，快去看看轮到谁了
+            {% endif %}
+            · 👥 {{ g.n_players }} 人
+          </p>
+        </div>
+        <span class="shrink-0 text-xs font-bold px-3 py-1 rounded-full
+          {{ 'bg-slate-100 text-slate-500' if g.session.status.value == 'lobby' else 'bg-amber-100 text-amber-600' }}">
+          {{ '等待加入' if g.session.status.value == 'lobby' else '进行中' }}
+        </span>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- 单人小游戏 -->
+<h2 class="font-extrabold text-slate-600 mb-3">🕹️ 课间小游戏</h2>
+<a href="/student/games/number-guess"
+   class="block bg-white/85 rounded-4xl p-6 shadow-md border-4 border-dashed border-violet-200 hover:scale-[1.01] transition transform">
+  <div class="flex items-center justify-between gap-4">
+    <div>
+      <h2 class="text-xl font-extrabold text-violet-600 mb-1">🎯 猜数字挑战</h2>
+      <p class="text-sm text-slate-400">我想了一个 1~100 的整数，猜大了 / 猜小了都会给你提示，试试用最少的次数猜中～</p>
+    </div>
+    <span class="text-4xl shrink-0">🕹️</span>
+  </div>
+</a>
+
+<div class="mt-6 text-center py-8 bg-white/50 rounded-4xl border-4 border-dashed border-slate-100">
+  <div class="text-4xl mb-2">🚧</div>
+  <p class="text-slate-400 text-sm">更多小游戏正在路上～</p>
+</div>
+{% endblock %}

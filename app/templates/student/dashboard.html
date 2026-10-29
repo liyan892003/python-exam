@@ -1,9 +1,12 @@
 {% extends "base.html" %}
 {% block title %}学生中心{% endblock %}
 {% block content %}
-<div class="flex items-center justify-between mb-6">
+<div class="flex items-center justify-between mb-6 gap-3 flex-wrap">
   <h1 class="text-3xl font-extrabold text-candy-500">🎒 我的班级</h1>
-  <a href="/student/join" class="px-5 py-3 rounded-4xl bg-candy-400 text-white font-bold shadow-lg hover:bg-candy-500 hover:scale-105 transition transform">🔑 加入班级</a>
+  <div class="flex gap-2">
+    <a href="/student/games" class="px-5 py-3 rounded-4xl bg-violet-100 text-violet-600 font-bold shadow hover:bg-violet-200 hover:scale-105 transition transform">🎮 游戏区</a>
+    <a href="/student/join" class="px-5 py-3 rounded-4xl bg-candy-400 text-white font-bold shadow-lg hover:bg-candy-500 hover:scale-105 transition transform">🔑 加入班级</a>
+  </div>
 </div>
 
 {% if classes_info %}

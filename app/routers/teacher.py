@@ -10,14 +10,17 @@ import urllib.parse
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Request, Response, Form, HTTPException
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from ..db import get_db
 from ..deps import templates, require_role
-from ..security import hash_password
+from ..security import hash_password_async
 from ..models import (User, Class, ProblemSet, Question, Choice, Enrollment, Answer,
-                      KnowledgePoint, QType, QuestionSource, Role, class_leaderboard)
+                      KnowledgePoint, QType, QuestionSource, Role, class_leaderboard,
+                      GameSession, GameStatus, GamePlayer, GameGuess)
+from .. import number_guess
 
 router = APIRouter(prefix="/teacher", tags=["teacher"])
 teacher_dep = require_role(Role.teacher)
@@ -426,7 +429,7 @@ async def reset_student_password(cid: int, uid: int,
     pwd = new_password.strip() or DEFAULT_STUDENT_PASSWORD
     if len(pwd) < 6:
         raise HTTPException(400, "密码至少 6 位")
-    student.password_hash = hash_password(pwd)
+    student.password_hash = await hash_password_async(pwd)
     db.commit()
     # 带回显参数跳回学生管理页，页面顶部显示提示
     return Response(status_code=303, headers={
@@ -587,3 +590,88 @@ async def add_from_bank(cid: int, sid: int, qid: int,
     db.commit()
     return Response(status_code=303,
                     headers={"Location": f"/teacher/classes/{cid}/sets/{sid}"})
+
+
+# —— 游戏区：课堂小游戏大厅 ——
+@router.get("/games")
+async def games_hub(request: Request, user: User = Depends(teacher_dep),
+                    db: Session = Depends(get_db)):
+    classes = (db.query(Class).filter(Class.teacher_id == user.id)
+               .order_by(Class.created_at.desc()).all())
+    sessions = (db.query(GameSession)
+                .filter(GameSession.teacher_id == user.id)
+                .order_by(GameSession.created_at.desc()).limit(20).all())
+    return templates.TemplateResponse(request, "teacher/games.html", {
+        "user": user, "classes": classes, "sessions": sessions})
+
+
+def _get_owned_session(db: Session, sid: int, user: User) -> GameSession:
+    # 预加载 player.student / guess.student，避免 session_state 逐个触发查询（N+1）
+    s = (db.query(GameSession)
+         .options(selectinload(GameSession.players).selectinload(GamePlayer.student),
+                  selectinload(GameSession.guesses).selectinload(GameGuess.student))
+         .filter(GameSession.id == sid, GameSession.teacher_id == user.id).first())
+    if not s:
+        raise HTTPException(404, "游戏不存在")
+    return s
+
+
+# —— 猜数字：教师创建一局 ——
+@router.post("/classes/{cid}/games/number-guess/create")
+async def create_number_guess(cid: int,
+                              user: User = Depends(teacher_dep),
+                              db: Session = Depends(get_db)):
+    cls = _get_owned_class(db, cid, user)
+    session = GameSession(class_id=cls.id, teacher_id=user.id)
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+    return Response(status_code=303,
+                    headers={"Location": f"/teacher/games/sessions/{session.id}"})
+
+
+# —— 猜数字：教师控制台（等待学生加入 / 开始 / 实时进度 / 结果） ——
+@router.get("/games/sessions/{sid}")
+async def game_board(sid: int, request: Request,
+                     user: User = Depends(teacher_dep),
+                     db: Session = Depends(get_db)):
+    session = _get_owned_session(db, sid, user)
+    return templates.TemplateResponse(request, "teacher/game_board.html", {
+        "user": user, "session": session, "cls": session.class_,
+        "state": number_guess.session_state(session)})
+
+
+@router.get("/games/sessions/{sid}/state")
+async def game_board_state(sid: int,
+                           user: User = Depends(teacher_dep),
+                           db: Session = Depends(get_db)):
+    session = _get_owned_session(db, sid, user)
+    return JSONResponse(number_guess.session_state(session))
+
+
+@router.post("/games/sessions/{sid}/start")
+async def game_board_start(sid: int,
+                           user: User = Depends(teacher_dep),
+                           db: Session = Depends(get_db)):
+    session = _get_owned_session(db, sid, user)
+    number_guess.start_game(db, session)
+    return Response(status_code=303, headers={"Location": f"/teacher/games/sessions/{sid}"})
+
+
+@router.post("/games/sessions/{sid}/reset")
+async def game_board_reset(sid: int,
+                           user: User = Depends(teacher_dep),
+                           db: Session = Depends(get_db)):
+    session = _get_owned_session(db, sid, user)
+    number_guess.reset_to_lobby(db, session)
+    return Response(status_code=303, headers={"Location": f"/teacher/games/sessions/{sid}"})
+
+
+@router.post("/games/sessions/{sid}/delete")
+async def game_board_delete(sid: int,
+                            user: User = Depends(teacher_dep),
+                            db: Session = Depends(get_db)):
+    session = _get_owned_session(db, sid, user)
+    db.delete(session)
+    db.commit()
+    return Response(status_code=303, headers={"Location": "/teacher/games"})

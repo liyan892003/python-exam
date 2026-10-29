@@ -1,7 +1,11 @@
 # Render Blueprint：一键创建「网站 + Postgres 数据库」
 # 文档: https://render.com/docs/blueprint-spec
-# 费用: Web 用 free（$0），数据库用 basic_256mb（约 $7/月，数据永久不过期）
+# 费用: Web 用 starter（$7/月，0.5 CPU，不休眠）；数据库用 basic_256mb（约 $7/月，数据永久不过期）
 # 区域选新加坡（singapore），国内访问延迟最低；网站和数据库必须同区域才能内网连通
+#
+# 为什么不用 free：free 档只有 0.1 CPU 且 15 分钟无流量就休眠。全班 40 人上课同时
+# 打开网页时，实例要么在冷启动、要么被 0.1 CPU 打满，健康检查超时 → Render 重启
+# 服务 → 学生端表现为「转圈很久 → 502/503」。
 databases:
   - name: python-exam-db
     plan: basic_256mb          # 付费入门档，避免 free 档 30 天过期删数据
@@ -13,7 +17,7 @@ services:
   - type: web
     name: python-exam
     runtime: python
-    plan: free                 # 15 分钟无流量休眠，上课前访问一次即可唤醒
+    plan: starter              # 0.5 CPU / 512MB，不休眠（free 档 0.1 CPU 且会休眠，40 人并发扛不住）
     region: singapore
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 2 --timeout-keep-alive 30

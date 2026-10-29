@@ -290,6 +290,76 @@ class StudentAchievement(Base):
     unlocked_at = Column(DateTime, default=datetime.utcnow)
 
 
+class GameStatus(str, enum.Enum):
+    lobby = "lobby"        # 等待学生加入
+    playing = "playing"    # 进行中
+    finished = "finished"  # 已结束
+
+
+class GameSession(Base):
+    """猜数字课堂游戏：教师创建 → 班级学生加入 → 按加入顺序轮流猜。
+
+    一轮 = 一个随机答案；轮内按加入顺序每人猜一次，猜中即本轮结束。
+    """
+    __tablename__ = "game_sessions"
+    id = Column(Integer, primary_key=True)
+    class_id = Column(Integer, ForeignKey("classes.id", ondelete="CASCADE"),
+                      nullable=False, index=True)
+    teacher_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    status = Column(SAEnum(GameStatus, native_enum=False, length=20),
+                    nullable=False, default=GameStatus.lobby)
+    target = Column(Integer, nullable=True)   # 本轮答案（只存服务端，不下发）
+    lo = Column(Integer, default=1)
+    hi = Column(Integer, default=100)
+    turn_pos = Column(Integer, default=0)     # 当前轮到 players 中的第几个（按加入顺序）
+    round_no = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime, nullable=True)
+    finished_at = Column(DateTime, nullable=True)
+
+    class_ = relationship("Class")
+    players = relationship("GamePlayer", back_populates="session",
+                           cascade="all, delete-orphan", order_by="GamePlayer.id")
+    guesses = relationship("GameGuess", back_populates="session",
+                           cascade="all, delete-orphan", order_by="GameGuess.id")
+
+
+class GamePlayer(Base):
+    """参与某局游戏的学生（按加入顺序排队）。"""
+    __tablename__ = "game_players"
+    __table_args__ = (UniqueConstraint("session_id", "student_id", name="uq_session_student"),)
+    id = Column(Integer, primary_key=True)
+    session_id = Column(Integer, ForeignKey("game_sessions.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    joined_at = Column(DateTime, default=datetime.utcnow)
+    played = Column(Boolean, default=False)   # 整局中是否轮到过（至少猜过一次）
+    wins = Column(Integer, default=0)         # 猜中次数
+
+    session = relationship("GameSession", back_populates="players")
+    student = relationship("User")
+
+
+class GameGuess(Base):
+    """一次猜测记录。"""
+    __tablename__ = "game_guesses"
+    id = Column(Integer, primary_key=True)
+    session_id = Column(Integer, ForeignKey("game_sessions.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    guess = Column(Integer, nullable=False)
+    result = Column(String(8), nullable=False)  # high / low / win
+    lo = Column(Integer, default=1)
+    hi = Column(Integer, default=100)
+    round_no = Column(Integer, default=1)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    session = relationship("GameSession", back_populates="guesses")
+    student = relationship("User")
+
+
 # —— 排行榜查询辅助 ——
 def class_leaderboard(db, class_id: int):
     """返回该班级学生总分排行 [(rank, user_id, username, score, answered_count)]。

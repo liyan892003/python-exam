@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}游戏区{% endblock %}
+{% block content %}
+<div class="mb-6">
+  <a href="/teacher" class="text-sm text-slate-400 hover:text-candy-400">← 返回教师中心</a>
+  <div class="mt-2">
+    <h1 class="text-3xl font-extrabold text-candy-500">🎮 游戏区</h1>
+    <p class="text-slate-400 text-sm">创建一局课堂游戏，学生用自己账号加入，轮流上台猜</p>
+  </div>
+</div>
+
+<!-- 猜数字：创建一局 -->
+<div class="bg-white/85 rounded-4xl p-6 shadow-md border-4 border-dashed border-violet-200">
+  <div class="flex items-start gap-4 mb-4">
+    <div class="text-5xl shrink-0">🎯</div>
+    <div class="flex-1">
+      <h2 class="text-xl font-extrabold text-violet-600 mb-1">猜数字大挑战</h2>
+      <p class="text-sm text-slate-400">老师建局 → 学生进入游戏链接 → 按加入顺序轮流猜 1~100，猜中即本轮结束；保证每位同学都轮到过。</p>
+    </div>
+  </div>
+
+  {% if classes %}
+  <div class="text-xs font-bold text-slate-400 mb-2">选择一个班级，创建新一局：</div>
+  <div class="flex flex-wrap gap-2">
+    {% for c in classes %}
+    <form method="post" action="/teacher/classes/{{ c.id }}/games/number-guess/create">
+      <button type="submit"
+              class="px-4 py-2 rounded-2xl bg-violet-50 border-2 border-violet-100 text-violet-600 font-bold text-sm hover:bg-violet-100 hover:scale-105 transition transform">
+        ➕ {{ c.name }}
+      </button>
+    </form>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="text-center py-6 bg-violet-50/50 rounded-2xl">
+    <p class="text-slate-400 text-sm mb-3">你还没有班级，先建一个班级并邀请学生加入吧</p>
+    <a href="/teacher/classes/new"
+       class="inline-block px-4 py-2 rounded-2xl bg-violet-100 text-violet-600 font-bold text-sm hover:bg-violet-200 transition">➕ 创建班级</a>
+  </div>
+  {% endif %}
+</div>
+
+<!-- 最近的游戏 -->
+{% if sessions %}
+<div class="mt-6">
+  <h2 class="font-extrabold text-slate-600 mb-3">🕘 最近的游戏</h2>
+  <div class="space-y-2">
+    {% for s in sessions %}
+    <a href="/teacher/games/sessions/{{ s.id }}"
+       class="flex items-center justify-between gap-3 bg-white/85 rounded-2xl px-4 py-3 shadow-sm hover:scale-[1.01] transition transform">
+      <div class="flex items-center gap-3 min-w-0">
+        <span class="text-xs font-bold text-slate-400 shrink-0">#{{ s.id }}</span>
+        <span class="font-extrabold text-slate-700 truncate">{{ s.class_.name }}</span>
+      </div>
+      <div class="flex items-center gap-3 shrink-0">
+        <span class="text-xs text-slate-400">👥 {{ s.players|length }}</span>
+        {% if s.status.value == 'lobby' %}
+        <span class="text-xs font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-500">等待加入</span>
+        {% elif s.status.value == 'playing' %}
+        <span class="text-xs font-bold px-3 py-1 rounded-full bg-amber-100 text-amber-600">进行中</span>
+        {% else %}
+        <span class="text-xs font-bold px-3 py-1 rounded-full bg-green-100 text-green-600">已结束</span>
+        {% endif %}
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div class="mt-6 text-center py-8 bg-white/50 rounded-4xl border-4 border-dashed border-slate-100">
+  <div class="text-4xl mb-2">🚧</div>
+  <p class="text-slate-400 text-sm">更多课堂小游戏正在路上～</p>
+</div>
+{% endblock %}

@@ -7,13 +7,15 @@
   试卷全部答完 → 自动跳转该班级排行榜（含烟花/奖杯动画）
 """
 from fastapi import APIRouter, Depends, Request, Response, Form, HTTPException
-from sqlalchemy.orm import Session
+from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session, selectinload
 
 from ..db import get_db
 from ..deps import templates, require_role
 from ..models import (User, Class, Enrollment, ProblemSet, Question, Choice, Answer,
-                      Role)
+                      Role, GameSession, GameStatus, GamePlayer, GameGuess)
 from ..achievements import evaluate_achievements
+from .. import number_guess
 
 router = APIRouter(prefix="/student", tags=["student"])
 student_dep = require_role(Role.student)
@@ -273,3 +275,71 @@ async def my_answers(cid: int, request: Request,
         "total_correct": total_correct,
         "total_score": total_score,
     })
+
+
+# —— 游戏区：单人小游戏 + 课堂多人游戏 ——
+@router.get("/games")
+async def games_hub(request: Request, user: User = Depends(student_dep),
+                    db: Session = Depends(get_db)):
+    # 该生所在班级里「等待加入 / 进行中」的课堂游戏
+    rows = (db.query(GameSession, Class)
+            .join(Class, Class.id == GameSession.class_id)
+            .join(Enrollment, Enrollment.class_id == Class.id)
+            .filter(Enrollment.student_id == user.id,
+                    GameSession.status.in_([GameStatus.lobby, GameStatus.playing]))
+            .order_by(GameSession.created_at.desc()).all())
+    games = []
+    for session, cls in rows:
+        joined = any(p.student_id == user.id for p in session.players)
+        games.append({"session": session, "cls": cls, "joined": joined,
+                      "n_players": len(session.players)})
+    return templates.TemplateResponse(request, "student/games.html", {
+        "user": user, "games": games})
+
+
+@router.get("/games/number-guess")
+async def number_guess_solo(request: Request, user: User = Depends(student_dep)):
+    return templates.TemplateResponse(request, "student/number_guess.html", {"user": user})
+
+
+def _get_visible_session(db: Session, sid: int, user: User) -> GameSession:
+    """取该生所在班级的一局游戏（否则 403）。"""
+    session = (db.query(GameSession)
+               .options(selectinload(GameSession.players).selectinload(GamePlayer.student),
+                        selectinload(GameSession.guesses).selectinload(GameGuess.student))
+               .filter(GameSession.id == sid).first())
+    if not session:
+        raise HTTPException(404, "游戏不存在")
+    _ensure_enrolled(db, session.class_id, user)
+    return session
+
+
+@router.get("/games/sessions/{sid}")
+async def game_play(sid: int, request: Request,
+                    user: User = Depends(student_dep),
+                    db: Session = Depends(get_db)):
+    session = _get_visible_session(db, sid, user)
+    # 等待阶段进入即加入；重新取一次以带出预加载（commit 后对象已过期）
+    number_guess.add_player(db, session, user.id)
+    session = _get_visible_session(db, sid, user)
+    return templates.TemplateResponse(request, "student/game_play.html", {
+        "user": user, "session": session, "cls": session.class_,
+        "state": number_guess.session_state(session, user.id)})
+
+
+@router.get("/games/sessions/{sid}/state")
+async def game_play_state(sid: int,
+                          user: User = Depends(student_dep),
+                          db: Session = Depends(get_db)):
+    session = _get_visible_session(db, sid, user)
+    return JSONResponse(number_guess.session_state(session, user.id))
+
+
+@router.post("/games/sessions/{sid}/guess")
+async def game_play_guess(sid: int, guess: int = Form(...),
+                          user: User = Depends(student_dep),
+                          db: Session = Depends(get_db)):
+    session = _get_visible_session(db, sid, user)
+    number_guess.submit_guess(db, session, user.id, guess)
+    session = _get_visible_session(db, sid, user)
+    return JSONResponse(number_guess.session_state(session, user.id))
