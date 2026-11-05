@@ -746,7 +746,36 @@ async def group_task_detail(tid: int, request: Request,
         "user": user, "cls": task.class_, "task": task,
         "stats": _task_stats(task),
         "drawn": request.query_params.get("drawn") == "1",
+        "dissolved": request.query_params.get("dissolved") == "1",
         "error": request.query_params.get("error")})
+
+
+@router.post("/groups/tasks/{tid}/teams/{team_id}/dissolve")
+async def dissolve_group_team(tid: int, team_id: int,
+                              user: User = Depends(teacher_dep),
+                              db: Session = Depends(get_db)):
+    """老师解散某个小组：组员全部释放（可重新加入其他组），该组提交材料一并删除。"""
+    task = _get_owned_group_task(db, tid, user)
+    team = next((t for t in task.teams if t.id == team_id), None)
+    if not team:
+        raise HTTPException(404, "小组不存在")
+
+    # 若该组在展演名单里，先移除并把剩余展演组重新编号 1..n（避免唯一约束冲突分两步）
+    remaining = sorted((s for s in task.showcases if s.team_id != team_id),
+                       key=lambda s: s.position)
+    for s in task.showcases:
+        if s.team_id == team_id:
+            db.delete(s)
+    for s in remaining:
+        s.position = 100 + s.position
+    db.flush()
+    for i, s in enumerate(remaining, 1):
+        s.position = i
+
+    db.delete(team)
+    db.commit()
+    return Response(status_code=303, headers={
+        "Location": f"/teacher/groups/tasks/{tid}?dissolved=1"})
 
 
 @router.post("/groups/tasks/{tid}/draw")

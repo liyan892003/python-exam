@@ -421,6 +421,8 @@ async def student_group_task(tid: int, request: Request,
         "classmates": classmates, "open_teams": open_teams,
         "showcases": task.showcases,
         "scored": request.query_params.get("scored") == "1",
+        "added": request.query_params.get("added") == "1",
+        "left": request.query_params.get("left") == "1",
         "error": request.query_params.get("error")})
 
 
@@ -476,6 +478,54 @@ async def join_group_team(tid: int, team_id: int,
     db.commit()
     return Response(status_code=303,
                     headers={"Location": f"/student/groups/tasks/{tid}"})
+
+
+@router.post("/groups/tasks/{tid}/leave")
+async def leave_group_team(tid: int,
+                           user: User = Depends(student_dep),
+                           db: Session = Depends(get_db)):
+    """退出当前小组。队长退出时：有队员则转让队长，无队员则解散小组（提交材料一并删除）。"""
+    task = _get_student_group_task(db, tid, user)
+    team = _my_team(task, user.id)
+    if not team:
+        raise HTTPException(400, "你还没有加入小组")
+    me = next((m for m in team.members if m.student_id == user.id), None)
+    others = [m for m in team.members if m.student_id != user.id]
+    if me:
+        db.delete(me)
+    if team.leader_id == user.id:
+        if others:
+            team.leader_id = others[0].student_id
+        else:
+            db.delete(team)
+    db.commit()
+    return Response(status_code=303,
+                    headers={"Location": f"/student/groups/tasks/{tid}?left=1"})
+
+
+@router.post("/groups/tasks/{tid}/teams/{team_id}/add")
+async def add_team_member(tid: int, team_id: int,
+                          student_id: int = Form(...),
+                          user: User = Depends(student_dep),
+                          db: Session = Depends(get_db)):
+    """队长把还没有小组的本班同学直接加进本组。"""
+    task = _get_student_group_task(db, tid, user)
+    team = next((t for t in task.teams if t.id == team_id), None)
+    if not team:
+        raise HTTPException(404, "小组不存在")
+    if team.leader_id != user.id:
+        raise HTTPException(403, "只有队长可以添加同学")
+    if len(team.members) >= task.max_members:
+        raise HTTPException(400, f"本组已满 {task.max_members} 人")
+    taken = {m.student_id for t in task.teams for m in t.members}
+    if student_id in taken:
+        raise HTTPException(400, "该同学已经在某个小组里了")
+    if student_id not in {u.id for u in _class_students(db, task.class_id)}:
+        raise HTTPException(400, "只能添加本班同学")
+    db.add(GroupMember(team_id=team.id, student_id=student_id))
+    db.commit()
+    return Response(status_code=303,
+                    headers={"Location": f"/student/groups/tasks/{tid}?added=1"})
 
 
 @router.post("/groups/tasks/{tid}/submit")

@@ -15,6 +15,12 @@
 {% if scored %}
 <div class="mb-4 px-5 py-3 rounded-2xl bg-green-50 border-2 border-green-200 text-green-600 font-bold text-sm">✅ 已提交，AI 已完成评分</div>
 {% endif %}
+{% if added %}
+<div class="mb-4 px-5 py-3 rounded-2xl bg-green-50 border-2 border-green-200 text-green-600 font-bold text-sm">✅ 已把同学加入本组</div>
+{% endif %}
+{% if left %}
+<div class="mb-4 px-5 py-3 rounded-2xl bg-sky-50 border-2 border-sky-200 text-sky2-500 font-bold text-sm">👋 已退出小组，现在可以加入其他小组了</div>
+{% endif %}
 
 {% if showcases %}
 <a href="/student/groups/tasks/{{ task.id }}/showcase"
@@ -44,6 +50,10 @@
       </div>
       <p class="text-xs text-slate-400 mt-1">队长：{{ my_team.leader.username if my_team.leader else '—' }} · {{ my_team.members|length }}/{{ task.max_members }} 人</p>
     </div>
+    <form method="post" action="/student/groups/tasks/{{ task.id }}/leave"
+          onsubmit="return confirm('{{ '退出后队长会自动转给第一位队员，确定退出吗？' if my_team.leader_id == user.id and my_team.members|length > 1 else ('你是唯一成员，退出后小组会解散、已提交材料一并删除，确定吗？' if my_team.leader_id == user.id else '退出后可以加入其他小组，确定退出吗？') }}');">
+      <button class="px-3 py-2 rounded-2xl bg-red-50 text-red-400 text-xs font-bold hover:bg-red-100 transition whitespace-nowrap">🚪 退出小组</button>
+    </form>
   </div>
   <div class="flex flex-wrap gap-2 mt-3">
     {% for m in my_team.members %}
@@ -54,6 +64,30 @@
     {% endfor %}
   </div>
 </div>
+
+{% if my_team.leader_id == user.id and my_team.members|length < task.max_members %}
+<div class="bg-white/85 rounded-4xl p-5 shadow-md mb-5 border-4 border-dashed border-sky-200">
+  <h3 class="text-lg font-extrabold text-sky2-500 mb-1">➕ 添加同学进组</h3>
+  <p class="text-xs text-slate-400 mb-3">还有 {{ task.max_members - my_team.members|length }} 个空位。还没组队的同学可以直接拉进来。</p>
+  {% if classmates %}
+  <form method="post" action="/student/groups/tasks/{{ task.id }}/teams/{{ my_team.id }}/add"
+        class="flex items-center gap-2 flex-wrap">
+    <select name="student_id" required
+            class="flex-1 min-w-[12rem] px-4 py-3 rounded-2xl border-2 border-sky-100 focus:border-sky-400 outline-none transition bg-sky-50/40 text-sm">
+      <option value="">— 选择一位还没组队的同学 —</option>
+      {% for s in classmates %}
+      <option value="{{ s.id }}">{{ s.username }}（{{ s.email }}）</option>
+      {% endfor %}
+    </select>
+    <button class="px-5 py-3 rounded-2xl bg-sky-100 text-sky2-500 text-sm font-bold hover:bg-sky-200 transition whitespace-nowrap">
+      加入本组
+    </button>
+  </form>
+  {% else %}
+  <p class="text-sm text-slate-400">目前没有还没组队的同学了。</p>
+  {% endif %}
+</div>
+{% endif %}
 
 <!-- 提交情况 -->
 {% set sub = my_team.submission %}
