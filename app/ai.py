@@ -322,20 +322,51 @@ is_correct 表示该陈述本身是否正确（即正确答案是"对"还是"错
 
 
 # —— 分组作业 AI 评分 ——
+# 评分方案（总分 100）：
+#   问题解决度 50（代码是否真正解决所选问题、结果是否正确、边界情况）
+#   简洁性     25（无明显冗余、结构清晰、函数/循环用得恰当）
+#   课程范围内 15（只允许 numbers/strings/lists、循环、if/else、自定义函数、文件、matplotlib；
+#                 出现 dict/set/tuple 等未学内容只做提醒，最多扣 5 分）
+#   代码规范   10（命名、注释、缩进、可运行）
 
-_GROUP_SCORE_SYSTEM = """你是高校《Python 程序设计》课程的评阅老师，学生是大二本科生。请阅读小组提交的代码/运行结果，按下列维度评分：
-1. 正确性：逻辑是否正确、能否得到预期结果（40 分）
-2. 完整性与需求达成：功能是否覆盖任务要求（25 分）
-3. 代码规范与可读性：命名、结构、注释、可维护性（20 分）
-4. 计算思维：问题分解、边界处理、复用与抽象（15 分）
+SYLLABUS_SCOPE = "numbers、字符串 string、列表 list、循环 loops(for/while)、if/else、自定义函数 def、文件读写 open、matplotlib 绘图"
+OUT_OF_SCOPE = "字典 dict、集合 set、元组 tuple（以及未学的 class/其他第三方库）"
+
+_GROUP_SCORE_SYSTEM = f"""你是高校《Python 程序设计》课程的评阅老师，学生是大二本科生。学生提交了「要解决的问题」和「代码实现」，请把两者一起评阅。
+
+本课程已学范围（只允许用这些）：{SYLLABUS_SCOPE}。
+尚未学习：{OUT_OF_SCOPE}。若代码用了未学内容，只需在 out_of_syllabus 中温和提醒（如「本题可用列表实现，无需使用字典」），不要因此大幅扣分（最多扣 5 分）。
+
+评分方案（总分 100）：
+1. 问题解决度 50 分：代码是否真正解决了学生所写的问题？运行结果是否正确？是否考虑常见边界情况？
+2. 简洁性 25 分：是否存在冗余/重复代码？结构是否清晰，函数与循环是否用得恰当？
+3. 课程范围内实现 15 分：是否只使用已学语法；超纲只提醒、最多扣 5 分。
+4. 代码规范 10 分：命名、注释、缩进、可直接运行。
 
 要求：
-- 总分 0~100 的整数；comments 与 suggestions 用中文，专业、具体，指出代码中的实际问题。
-- 不要空泛鼓励。只输出严格 JSON，不要任何额外文字：
-{{"score": 85, "comment": "总体评价，指出亮点与主要问题（<=120字）", "suggestions": "2 条可执行的改进建议（<=120字）"}}"""
+- 只输出严格 JSON，不要任何额外文字：
+{{"score": 85, "solved": "是", "comment": "总体评价：先说是否解决了问题，再指出简洁性与规范问题（<=120字）", "suggestions": "2 条可执行的改进建议（<=120字）", "out_of_syllabus": "无"}}
+- solved 只能是 "是" / "部分" / "否"；out_of_syllabus 没有超纲内容时写 "无"，有则一句话说明替代写法。"""
 
 
-def _fallback_group_score(content: str) -> dict:
+def _detect_out_of_syllabus(text: str) -> str:
+    """规则检测未学语法（用于无 API 时的提醒）。"""
+    import re
+    hits = []
+    if re.search(r"\bdict\s*\(|\bcollections\b|=\s*\{|return\s*\{", text):
+        hits.append("字典")
+    if re.search(r"\bset\s*\(|\bfrozenset\b", text):
+        hits.append("集合")
+    if re.search(r"\btuple\s*\(|return\s+[^(\n]*,", text):
+        hits.append("元组")
+    if re.search(r"^\s*class\s+\w+", text, re.M):
+        hits.append("自定义类")
+    if not hits:
+        return "无"
+    return f"检测到可能使用了未学内容（{'、'.join(hits)}），建议改用列表/循环/函数实现；仅为提醒，不作为主要扣分项。"
+
+
+def _fallback_group_score(problem: str, content: str) -> dict:
     """无 API / 调用失败时的规则粗评（保证上传流程不中断）。"""
     text = content or ""
     n_lines = len([ln for ln in text.splitlines() if ln.strip()])
@@ -343,14 +374,14 @@ def _fallback_group_score(content: str) -> dict:
     hits = []
     if "def " in text:
         score += 8; hits.append("使用函数封装")
-    if "class " in text:
-        score += 5; hits.append("使用类")
     if any(k in text for k in ("for ", "while ")):
         score += 6; hits.append("使用循环")
     if any(k in text for k in ("if ", "elif ", "else")):
         score += 4; hits.append("有条件判断")
-    if "try:" in text or "except" in text:
-        score += 4; hits.append("有异常处理")
+    if "open(" in text:
+        score += 3; hits.append("使用文件读写")
+    if "matplotlib" in text or "plt." in text:
+        score += 4; hits.append("使用 matplotlib")
     if "#" in text:
         score += 3; hits.append("有注释")
     if n_lines >= 15:
@@ -359,26 +390,33 @@ def _fallback_group_score(content: str) -> dict:
         score += 4
     if any(k in text for k in ("print(", "input(")):
         score += 3
+    out = _detect_out_of_syllabus(text)
+    if out != "无":
+        score = max(score - 5, 50)
     score = min(score, 95)
     comment = ("未接入 AI（DEEPSEEK_API_KEY 未配置或调用失败），按代码特征粗评："
                + ("；".join(hits) if hits else "内容较短，暂未识别到结构化代码")
-               + f"。共 {n_lines} 行有效代码。")
-    suggestions = "1. 按任务要求逐条自测，附上运行结果；2. 补充关键步骤注释并统一命名规范。"
+               + f"。共 {n_lines} 行有效代码，是否解决「{(problem or '未填写的问题')[:60]}」需老师人工确认。")
+    suggestions = "1. 按所写问题逐条自测并附运行结果；2. 补充关键步骤注释并统一命名规范。"
     return {"score": score, "comment": comment[:300], "suggestions": suggestions,
-            "source": "fallback"}
+            "solved": "未判定", "out_of_syllabus": out, "source": "fallback"}
 
 
 def score_group_submission(title: str, description: str, team_name: str,
                            members: str, filename: str, note: str,
-                           content: str) -> dict:
-    """给一组的分组作业打分。返回 {score, comment, suggestions, source}；异常降级规则评分。"""
+                           problem: str, content: str) -> dict:
+    """根据「所解决的问题 + 代码」给小组打分。返回
+    {score, comment, suggestions, solved, out_of_syllabus, source}；异常降级规则评分。"""
     content = (content or "")[:6000]
+    problem = (problem or "").strip()[:600]
     if not settings.DEEPSEEK_API_KEY:
-        return _fallback_group_score(content)
+        return _fallback_group_score(problem, content)
     user_prompt = (f"作业任务：{title}\n任务说明：{description or '（无）'}\n"
                    f"小组名称：{team_name}\n组员：{members or '（未知）'}\n"
                    f"提交文件：{filename or '（直接粘贴文本）'}\n"
-                   f"小组说明：{note or '（无）'}\n\n提交内容：\n{content}\n\n请评分并输出 JSON。")
+                   f"小组说明：{note or '（无）'}\n\n"
+                   f"【要解决的问题】\n{problem or '（未填写）'}\n\n"
+                   f"【代码实现】\n{content}\n\n请按评分方案评阅并输出 JSON。")
     try:
         client = _client()
         resp = client.chat.completions.create(
@@ -393,9 +431,15 @@ def score_group_submission(title: str, description: str, team_name: str,
         score = int(data.get("score"))
         if not (0 <= score <= 100):
             raise ValueError("score 越界")
+        solved = str(data.get("solved", "")).strip()
+        if solved not in ("是", "部分", "否"):
+            solved = "未判定"
+        out = str(data.get("out_of_syllabus", "无")).strip() or "无"
         return {"score": score,
                 "comment": str(data.get("comment", "")).strip()[:300],
                 "suggestions": str(data.get("suggestions", "")).strip()[:300],
+                "solved": solved,
+                "out_of_syllabus": out[:300],
                 "source": "ai"}
     except Exception:
-        return _fallback_group_score(content)
+        return _fallback_group_score(problem, content)

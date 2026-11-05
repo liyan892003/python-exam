@@ -17,6 +17,8 @@
            class="md:col-span-2 px-4 py-3 rounded-2xl border-2 border-violet-100 focus:border-violet-400 outline-none transition bg-violet-50/40">
     <input type="text" name="description" placeholder="任务说明，如：用函数封装、提交 .py 或运行结果"
            class="md:col-span-2 px-4 py-3 rounded-2xl border-2 border-violet-100 focus:border-violet-400 outline-none transition bg-violet-50/40">
+    <textarea name="problems" rows="2" placeholder="可选：要解决的问题清单，一行一个。学生提交时从中选择一个；留空则由学生自己填写"
+              class="md:col-span-6 px-4 py-3 rounded-2xl border-2 border-violet-100 focus:border-violet-400 outline-none transition bg-violet-50/40 text-sm"></textarea>
     <div class="flex items-center gap-2 px-4 py-3 rounded-2xl bg-violet-50/40 border-2 border-violet-100">
       <span class="text-xs text-slate-500 font-bold whitespace-nowrap">每组上限</span>
       <input type="number" name="max_members" min="2" max="8" value="4"

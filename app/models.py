@@ -372,6 +372,7 @@ class GroupTask(Base):
                         nullable=False, index=True)
     title = Column(String(128), nullable=False)
     description = Column(Text, default="")
+    problems = Column(Text, default="")   # 备选问题，一行一个；留空则由学生自己填写
     max_members = Column(Integer, default=4)   # 每组人数上限（含队长）
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -422,11 +423,14 @@ class GroupSubmission(Base):
                      nullable=False, unique=True, index=True)
     filename = Column(String(255), default="")
     note = Column(Text, default="")
+    problem = Column(Text, default="")   # 本次提交要解决的问题
     content = Column(Text, nullable=False, default="")
     submitted_by = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     submitted_at = Column(DateTime, default=datetime.utcnow)
     ai_score = Column(Integer, nullable=True)
     ai_feedback = Column(Text, default="")
+    ai_solved = Column(String(16), default="")          # 是 / 部分 / 否 / 未判定
+    ai_out_of_syllabus = Column(Text, default="")       # 超纲提醒（无则为空）
     ai_source = Column(String(16), default="fallback")   # ai / fallback
 
     team = relationship("GroupTeam", back_populates="submission")

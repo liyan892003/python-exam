@@ -77,6 +77,25 @@ def _migrate_question_difficulty() -> None:
                               "NOT NULL DEFAULT 'basic'"))
 
 
+def _migrate_group_fields() -> None:
+    """轻量迁移：分组作业补充「问题」列与 AI 判定列（create_all 不会给旧表加列）。"""
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+
+    def add(table: str, col: str, ddl: str) -> None:
+        if table not in tables:
+            return
+        cols = {c["name"] for c in inspector.get_columns(table)}
+        if col not in cols:
+            with engine.begin() as conn:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {ddl}"))
+
+    add("group_tasks", "problems", "problems TEXT DEFAULT ''")
+    add("group_submissions", "problem", "problem TEXT DEFAULT ''")
+    add("group_submissions", "ai_solved", "ai_solved VARCHAR(16) DEFAULT ''")
+    add("group_submissions", "ai_out_of_syllabus", "ai_out_of_syllabus TEXT DEFAULT ''")
+
+
 def _migrate_to_levels() -> None:
     """旧库迁移：没有任何关卡的班级，自动建「第 1 周」并装入其全部试卷。"""
     db = SessionLocal()
@@ -106,6 +125,7 @@ async def lifespan(app: FastAPI):
     _migrate_question_difficulty()
     _migrate_to_sets()
     _migrate_level_topics()
+    _migrate_group_fields()
     _migrate_to_levels()
     yield
 

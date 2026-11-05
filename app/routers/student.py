@@ -482,6 +482,7 @@ async def join_group_team(tid: int, team_id: int,
 async def submit_group_work(tid: int,
                             file: UploadFile | None = File(None),
                             content: str = Form(""),
+                            problem: str = Form(""),
                             note: str = Form(""),
                             user: User = Depends(student_dep),
                             db: Session = Depends(get_db)):
@@ -491,6 +492,14 @@ async def submit_group_work(tid: int,
         raise HTTPException(400, "请先加入一个小组再提交")
     if team.leader_id != user.id:
         raise HTTPException(403, "只有队长可以上传材料")
+
+    problem = problem.strip()[:600]
+    allowed = [ln.strip() for ln in (task.problems or "").splitlines() if ln.strip()]
+    if allowed:
+        if problem not in allowed:
+            raise HTTPException(400, "请从老师给出的问题中选择一个")
+    elif not problem:
+        raise HTTPException(400, "请先填写要解决的问题")
 
     filename = "粘贴文本"
     text = content.strip()
@@ -515,7 +524,7 @@ async def submit_group_work(tid: int,
     members = "、".join(m.student.username for m in team.members if m.student)
     result = await run_in_threadpool(
         ai.score_group_submission, task.title, task.description or "",
-        team.name, members, filename, note.strip(), text)
+        team.name, members, filename, note.strip(), problem, text)
     feedback = result["comment"]
     if result.get("suggestions"):
         feedback += "\n改进建议：" + result["suggestions"]
@@ -526,10 +535,13 @@ async def submit_group_work(tid: int,
         db.add(sub)
     sub.filename = filename
     sub.note = note.strip()[:500]
+    sub.problem = problem
     sub.content = text
     sub.submitted_by = user.id
     sub.ai_score = result["score"]
     sub.ai_feedback = feedback
+    sub.ai_solved = result.get("solved", "")
+    sub.ai_out_of_syllabus = result.get("out_of_syllabus", "") or ""
     sub.ai_source = result.get("source", "fallback")
     sub.submitted_at = datetime.utcnow()
     db.commit()

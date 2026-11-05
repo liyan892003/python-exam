@@ -7,6 +7,14 @@
     <div>
       <h1 class="text-3xl font-extrabold text-violet-600">🧩 {{ task.title }}</h1>
       <p class="text-slate-400 text-sm">{{ cls.name }} · {{ task.description or '暂无任务说明' }}</p>
+      {% if task.problems %}
+      <div class="flex flex-wrap gap-1 mt-2">
+        <span class="text-[11px] text-slate-400 font-bold">问题清单：</span>
+        {% for p in task.problems.splitlines() if p.strip() %}
+        <span class="px-2 py-0.5 rounded-full bg-violet-50 text-violet-500 text-[11px] font-bold">{{ p.strip() }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
     </div>
     <div class="flex items-center gap-3">
       <form method="post" action="/teacher/groups/tasks/{{ task.id }}/draw">
@@ -44,6 +52,8 @@
     <div class="text-2xl font-extrabold text-green-600">{{ stats.n_showcase }}</div>
   </div>
 </div>
+
+<p class="text-[11px] text-slate-400 mb-5">📐 AI 评分方案：问题解决度 50 · 简洁性 25 · 课程范围内实现 15 · 代码规范 10；出现字典/集合/元组等未学内容只提醒，最多扣 5 分。</p>
 
 <!-- 抽中的 3 组展演名单 -->
 {% if task.showcases %}
@@ -95,6 +105,9 @@
           <span class="px-2 py-0.5 rounded-full bg-candy-100 text-candy-600 text-[11px] font-bold">队长 {{ tm.leader.username if tm.leader else '—' }}</span>
           {% if tm.submission %}
           <span class="px-2 py-0.5 rounded-full bg-green-100 text-green-600 text-[11px] font-bold">已提交 · AI {{ tm.submission.ai_score }} 分</span>
+          {% if tm.submission.ai_solved and tm.submission.ai_solved != '未判定' %}
+          <span class="px-2 py-0.5 rounded-full {{ 'bg-green-100 text-green-600' if tm.submission.ai_solved == '是' else ('bg-amber-100 text-amber-600' if tm.submission.ai_solved == '部分' else 'bg-red-100 text-red-500') }} text-[11px] font-bold">解决问题：{{ tm.submission.ai_solved }}</span>
+          {% endif %}
           {% else %}
           <span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-400 text-[11px] font-bold">未提交</span>
           {% endif %}
@@ -112,6 +125,10 @@
     {% if tm.submission %}
     <details class="mt-3 group">
       <summary class="cursor-pointer text-sm font-bold text-sky2-500 select-none">📄 查看提交内容（{{ tm.submission.filename or '粘贴文本' }}）</summary>
+      <div class="mt-2 text-xs text-slate-600 bg-violet-50 rounded-xl px-3 py-2 whitespace-pre-wrap"><span class="font-bold text-violet-500">要解决的问题：</span>{{ tm.submission.problem or '未填写' }}</div>
+      {% if tm.submission.ai_out_of_syllabus and tm.submission.ai_out_of_syllabus != '无' %}
+      <div class="mt-2 text-xs text-amber-700 bg-amber-50 border-2 border-amber-100 rounded-xl px-3 py-2 whitespace-pre-wrap">📌 超纲提醒：{{ tm.submission.ai_out_of_syllabus }}</div>
+      {% endif %}
       {% if tm.submission.note %}
       <p class="mt-2 text-xs text-slate-500 bg-slate-50 rounded-xl px-3 py-2 whitespace-pre-wrap">{{ tm.submission.note }}</p>
       {% endif %}

@@ -718,6 +718,7 @@ async def group_tasks(cid: int, request: Request,
 async def create_group_task(cid: int,
                             title: str = Form(...),
                             description: str = Form(""),
+                            problems: str = Form(""),
                             max_members: int = Form(4),
                             user: User = Depends(teacher_dep),
                             db: Session = Depends(get_db)):
@@ -727,7 +728,8 @@ async def create_group_task(cid: int,
         raise HTTPException(400, "任务名称不能为空")
     max_members = max(2, min(8, max_members))
     t = GroupTask(class_id=cls.id, teacher_id=user.id, title=title[:128],
-                  description=description.strip(), max_members=max_members)
+                  description=description.strip(), problems=problems.strip()[:2000],
+                  max_members=max_members)
     db.add(t)
     db.commit()
     db.refresh(t)
