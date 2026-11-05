@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}分组任务 · {{ task.title }}{% endblock %}
+{% block content %}
+<div class="mb-6">
+  <a href="/teacher/classes/{{ cls.id }}/groups" class="text-sm text-slate-400 hover:text-candy-400">← 返回分组作业</a>
+  <div class="flex items-start justify-between gap-4 mt-2 flex-wrap">
+    <div>
+      <h1 class="text-3xl font-extrabold text-violet-600">🧩 {{ task.title }}</h1>
+      <p class="text-slate-400 text-sm">{{ cls.name }} · {{ task.description or '暂无任务说明' }}</p>
+    </div>
+    <div class="flex items-center gap-3">
+      <form method="post" action="/teacher/groups/tasks/{{ task.id }}/draw">
+        <button class="px-5 py-3 rounded-2xl bg-candy-400 text-white font-bold shadow-lg hover:bg-candy-500 hover:scale-105 transition transform whitespace-nowrap">
+          🎲 随机抽 3 组
+        </button>
+      </form>
+      <form method="post" action="/teacher/groups/tasks/{{ task.id }}/delete"
+            onsubmit="return confirm('删除这个分组任务？小组与提交材料都会一起删除。');">
+        <button class="px-3 py-2 rounded-2xl bg-red-50 text-red-400 text-sm font-bold hover:bg-red-100 transition">🗑️ 删除任务</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% if error %}
+<div class="mb-4 px-5 py-3 rounded-2xl bg-amber-50 border-2 border-amber-200 text-amber-700 font-bold text-sm">⚠️ {{ error }}</div>
+{% endif %}
+
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+  <div class="bg-violet-50 rounded-2xl p-3 text-center">
+    <div class="text-xs text-slate-400">小组数</div>
+    <div class="text-2xl font-extrabold text-violet-600">{{ stats.n_teams }}</div>
+  </div>
+  <div class="bg-sky-50 rounded-2xl p-3 text-center">
+    <div class="text-xs text-slate-400">已提交</div>
+    <div class="text-2xl font-extrabold text-sky2-500">{{ stats.n_submitted }}</div>
+  </div>
+  <div class="bg-amber-50 rounded-2xl p-3 text-center">
+    <div class="text-xs text-slate-400">每组上限</div>
+    <div class="text-2xl font-extrabold text-amber-500">{{ task.max_members }} 人</div>
+  </div>
+  <div class="bg-green-50 rounded-2xl p-3 text-center">
+    <div class="text-xs text-slate-400">展演组</div>
+    <div class="text-2xl font-extrabold text-green-600">{{ stats.n_showcase }}</div>
+  </div>
+</div>
+
+<!-- 抽中的 3 组展演名单 -->
+{% if task.showcases %}
+<div class="bg-gradient-to-r from-amber-50 via-candy-50 to-violet-50 rounded-4xl p-6 shadow-md mb-6 border-4 border-amber-200">
+  <div class="flex items-center justify-between flex-wrap gap-2 mb-4">
+    <h2 class="text-xl font-extrabold text-amber-600">🎉 展演名单（{{ task.showcases|length }} 组）</h2>
+    <p class="text-xs text-slate-400">点「上大屏」把该组内容全屏投放；第一组已高亮</p>
+  </div>
+  <div class="grid md:grid-cols-3 gap-4">
+    {% for us in task.showcases %}
+    {% set tm = us.team %}
+    <div class="bg-white/90 rounded-4xl p-5 shadow border-4 {{ 'border-candy-300' if us.position == 1 else 'border-slate-100' }}">
+      <div class="flex items-center justify-between mb-2">
+        <span class="px-3 py-1 rounded-full text-xs font-extrabold {{ 'bg-candy-400 text-white' if us.position == 1 else 'bg-slate-100 text-slate-500' }}">
+          第 {{ us.position }} 组
+        </span>
+        {% if tm.submission %}
+        <span class="text-lg font-extrabold text-amber-500">{{ tm.submission.ai_score }}<span class="text-xs text-slate-400"> 分</span></span>
+        {% endif %}
+      </div>
+      <h3 class="text-lg font-extrabold text-slate-700 truncate">{{ tm.name }}</h3>
+      <p class="text-xs text-slate-400 mt-1">队长：{{ tm.leader.username if tm.leader else '—' }}</p>
+      <div class="flex flex-wrap gap-1 mt-2">
+        {% for m in tm.members %}
+        <span class="px-2 py-0.5 rounded-full bg-violet-50 text-violet-500 text-[11px] font-bold">{{ m.student.username if m.student else '—' }}</span>
+        {% endfor %}
+      </div>
+      <a href="/teacher/groups/tasks/{{ task.id }}/screen/{{ us.position }}"
+         class="mt-4 block text-center px-4 py-2.5 rounded-2xl font-bold text-sm transition
+         {{ 'bg-candy-400 text-white hover:bg-candy-500' if us.position == 1 else 'bg-slate-100 text-slate-500 hover:bg-slate-200' }}">
+        🖥️ {{ '第一组上大屏' if us.position == 1 else '上大屏' }}
+      </a>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- 全部小组与提交情况 -->
+<h2 class="text-xl font-extrabold text-slate-600 mb-3">👥 小组与提交（{{ stats.n_teams }}）</h2>
+{% if task.teams %}
+<div class="space-y-3">
+  {% for tm in task.teams %}
+  <div class="bg-white/85 rounded-4xl p-5 shadow-md">
+    <div class="flex items-start justify-between gap-3 flex-wrap">
+      <div class="min-w-0">
+        <div class="flex items-center gap-2 flex-wrap">
+          <h3 class="text-lg font-extrabold text-slate-700">{{ tm.name }}</h3>
+          <span class="px-2 py-0.5 rounded-full bg-candy-100 text-candy-600 text-[11px] font-bold">队长 {{ tm.leader.username if tm.leader else '—' }}</span>
+          {% if tm.submission %}
+          <span class="px-2 py-0.5 rounded-full bg-green-100 text-green-600 text-[11px] font-bold">已提交 · AI {{ tm.submission.ai_score }} 分</span>
+          {% else %}
+          <span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-400 text-[11px] font-bold">未提交</span>
+          {% endif %}
+        </div>
+        <div class="flex flex-wrap gap-1 mt-2">
+          {% for m in tm.members %}
+          <span class="px-2 py-0.5 rounded-full bg-violet-50 text-violet-500 text-[11px] font-bold">
+            {{ m.student.username if m.student else '—' }} <span class="opacity-60 font-mono">{{ m.student.email if m.student else '' }}</span>
+          </span>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    {% if tm.submission %}
+    <details class="mt-3 group">
+      <summary class="cursor-pointer text-sm font-bold text-sky2-500 select-none">📄 查看提交内容（{{ tm.submission.filename or '粘贴文本' }}）</summary>
+      {% if tm.submission.note %}
+      <p class="mt-2 text-xs text-slate-500 bg-slate-50 rounded-xl px-3 py-2 whitespace-pre-wrap">{{ tm.submission.note }}</p>
+      {% endif %}
+      <pre class="mt-2 max-h-64 overflow-auto bg-slate-900 text-slate-100 rounded-2xl p-4 text-xs leading-relaxed whitespace-pre-wrap">{{ tm.submission.content }}</pre>
+      <div class="mt-2 text-xs text-slate-500 bg-amber-50 border-2 border-amber-100 rounded-2xl px-3 py-2 whitespace-pre-wrap">{{ tm.submission.ai_feedback }}</div>
+    </details>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-10 bg-white/60 rounded-4xl">
+  <div class="text-4xl mb-2">🕐</div>
+  <p class="text-slate-400 text-sm">还没有学生建组，把任务告诉学生吧～</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if drawn %}
+<script>
+  // 抽出 3 组后的恭喜撒花
+  function burst() {
+    if (typeof confetti !== 'function') return;
+    confetti({ particleCount: 220, spread: 100, origin: { y: 0.55 }, zIndex: 999 });
+    setTimeout(() => confetti({ particleCount: 120, angle: 60, spread: 80, origin: { x: 0 }, zIndex: 999 }), 250);
+    setTimeout(() => confetti({ particleCount: 120, angle: 120, spread: 80, origin: { x: 1 }, zIndex: 999 }), 450);
+    setTimeout(() => confetti({ particleCount: 160, spread: 120, origin: { y: 0.35 }, zIndex: 999 }), 800);
+  }
+  burst();
+  setTimeout(burst, 1800);
+</script>
+{% endif %}
+{% endblock %}

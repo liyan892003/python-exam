@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}分组作业 · {{ cls.name }}{% endblock %}
+{% block content %}
+<div class="mb-6">
+  <a href="/teacher/classes/{{ cls.id }}" class="text-sm text-slate-400 hover:text-candy-400">← 返回班级</a>
+  <div class="mt-2">
+    <h1 class="text-3xl font-extrabold text-violet-600">🧑‍🤝‍🧑 分组作业 · {{ cls.name }}</h1>
+    <p class="text-slate-400 text-sm">发布任务 → 学生自行建组 → 队长提交材料 → AI 评分 → 随机抽 3 组上大屏</p>
+  </div>
+</div>
+
+<div class="bg-white/85 rounded-4xl p-6 shadow-md mb-6 border-4 border-dashed border-violet-200">
+  <h2 class="text-xl font-extrabold text-violet-600 mb-3">➕ 新建分组任务</h2>
+  <form method="post" action="/teacher/classes/{{ cls.id }}/groups"
+        class="grid grid-cols-1 md:grid-cols-6 gap-3">
+    <input type="text" name="title" required placeholder="任务名称，如：第 3 周 · 猜数字小游戏"
+           class="md:col-span-2 px-4 py-3 rounded-2xl border-2 border-violet-100 focus:border-violet-400 outline-none transition bg-violet-50/40">
+    <input type="text" name="description" placeholder="任务说明，如：用函数封装、提交 .py 或运行结果"
+           class="md:col-span-2 px-4 py-3 rounded-2xl border-2 border-violet-100 focus:border-violet-400 outline-none transition bg-violet-50/40">
+    <div class="flex items-center gap-2 px-4 py-3 rounded-2xl bg-violet-50/40 border-2 border-violet-100">
+      <span class="text-xs text-slate-500 font-bold whitespace-nowrap">每组上限</span>
+      <input type="number" name="max_members" min="2" max="8" value="4"
+             class="w-16 px-2 py-1 rounded-xl border-2 border-violet-100 text-center font-bold outline-none focus:border-violet-400">
+    </div>
+    <button class="px-6 py-3 rounded-2xl bg-violet-400 text-white font-bold shadow-lg hover:bg-violet-500 hover:scale-105 transition transform">
+      🚀 发布任务
+    </button>
+  </form>
+</div>
+
+{% if tasks %}
+<div class="space-y-3">
+  {% for t in tasks %}
+  <a href="/teacher/groups/tasks/{{ t.id }}"
+     class="block bg-white/85 rounded-4xl p-5 shadow-md hover:scale-[1.01] transition transform">
+    <div class="flex items-center justify-between gap-4 flex-wrap">
+      <div class="min-w-0">
+        <div class="flex items-center gap-2">
+          <span class="text-2xl">🧩</span>
+          <h3 class="text-lg font-extrabold text-slate-700 truncate">{{ t.title }}</h3>
+          {% if stats[t.id].n_showcase %}
+          <span class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-600 text-[11px] font-bold">🎉 已抽出展演组</span>
+          {% endif %}
+        </div>
+        <p class="text-xs text-slate-400 mt-1 ml-8">{{ t.description or '暂无说明' }}</p>
+      </div>
+      <div class="flex items-center gap-4 shrink-0 text-center">
+        <div><div class="text-lg font-extrabold text-violet-600">{{ stats[t.id].n_teams }}</div><div class="text-[11px] text-slate-400">小组</div></div>
+        <div><div class="text-lg font-extrabold text-sky2-500">{{ stats[t.id].n_submitted }}</div><div class="text-[11px] text-slate-400">已提交</div></div>
+        <div><div class="text-lg font-extrabold text-amber-500">{{ t.max_members }}</div><div class="text-[11px] text-slate-400">每组上限</div></div>
+      </div>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-12 bg-white/60 rounded-4xl">
+  <div class="text-5xl mb-3">🧑‍🤝‍🧑</div>
+  <p class="text-slate-400">还没有分组任务，用上面的表单发布第一个吧！</p>
+</div>
+{% endif %}
+{% endblock %}

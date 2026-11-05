@@ -6,16 +6,20 @@
   答完一题 → answer_result 页自动 3 秒后跳到下一题
   试卷全部答完 → 自动跳转该班级排行榜（含烟花/奖杯动画）
 """
-from fastapi import APIRouter, Depends, Request, Response, Form, HTTPException
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, Request, Response, Form, HTTPException, UploadFile, File
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session, selectinload
+from starlette.concurrency import run_in_threadpool
 
 from ..db import get_db
 from ..deps import templates, require_role
 from ..models import (User, Class, Enrollment, ProblemSet, Question, Choice, Answer,
-                      Role, GameSession, GameStatus, GamePlayer, GameGuess)
+                      Role, GameSession, GameStatus, GamePlayer, GameGuess,
+                      GroupTask, GroupTeam, GroupMember, GroupSubmission, GroupShowcase)
 from ..achievements import evaluate_achievements
-from .. import number_guess
+from .. import number_guess, ai
 
 router = APIRouter(prefix="/student", tags=["student"])
 student_dep = require_role(Role.student)
@@ -343,3 +347,201 @@ async def game_play_guess(sid: int, guess: int = Form(...),
     number_guess.submit_guess(db, session, user.id, guess)
     session = _get_visible_session(db, sid, user)
     return JSONResponse(number_guess.session_state(session, user.id))
+
+
+# —— 分组作业：建组 / 入组 / 队长上传 / 查看展演 ——
+
+TEXT_LIMIT = 200_000  # 单份材料上限 200KB
+
+
+def _get_student_group_task(db: Session, tid: int, user: User) -> GroupTask:
+    """取本班的分组任务（未选课 → 403）。"""
+    task = (db.query(GroupTask)
+            .options(selectinload(GroupTask.teams).selectinload(GroupTeam.members)
+                     .selectinload(GroupMember.student),
+                     selectinload(GroupTask.teams).selectinload(GroupTeam.leader),
+                     selectinload(GroupTask.teams).selectinload(GroupTeam.submission),
+                     selectinload(GroupTask.showcases).selectinload(GroupShowcase.team)
+                     .selectinload(GroupTeam.submission),
+                     selectinload(GroupTask.showcases).selectinload(GroupShowcase.team)
+                     .selectinload(GroupTeam.members).selectinload(GroupMember.student))
+            .filter(GroupTask.id == tid).first())
+    if not task:
+        raise HTTPException(404, "分组任务不存在")
+    _ensure_enrolled(db, task.class_id, user)
+    return task
+
+
+def _my_team(task: GroupTask, uid: int) -> GroupTeam | None:
+    for t in task.teams:
+        if any(m.student_id == uid for m in t.members):
+            return t
+    return None
+
+
+def _class_students(db: Session, cid: int) -> list[User]:
+    return (db.query(User)
+            .join(Enrollment, Enrollment.student_id == User.id)
+            .filter(Enrollment.class_id == cid, User.role == Role.student)
+            .order_by(User.email).all())
+
+
+@router.get("/classes/{cid}/groups")
+async def student_group_tasks(cid: int, request: Request,
+                              user: User = Depends(student_dep),
+                              db: Session = Depends(get_db)):
+    cls = _ensure_enrolled(db, cid, user)
+    tasks = (db.query(GroupTask)
+             .options(selectinload(GroupTask.teams).selectinload(GroupTeam.members),
+                      selectinload(GroupTask.teams).selectinload(GroupTeam.submission),
+                      selectinload(GroupTask.showcases))
+             .filter(GroupTask.class_id == cid)
+             .order_by(GroupTask.created_at.desc()).all())
+    rows = [{"task": t, "my_team": _my_team(t, user.id),
+             "n_teams": len(t.teams),
+             "n_submitted": sum(1 for tt in t.teams if tt.submission),
+             "n_showcase": len(t.showcases)} for t in tasks]
+    return templates.TemplateResponse(request, "student/group_tasks.html", {
+        "user": user, "cls": cls, "rows": rows})
+
+
+@router.get("/groups/tasks/{tid}")
+async def student_group_task(tid: int, request: Request,
+                             user: User = Depends(student_dep),
+                             db: Session = Depends(get_db)):
+    task = _get_student_group_task(db, tid, user)
+    my_team = _my_team(task, user.id)
+    taken_ids = {m.student_id for t in task.teams for m in t.members}
+    classmates = [u for u in _class_students(db, task.class_id)
+                  if u.id not in taken_ids and u.id != user.id]
+    open_teams = [t for t in task.teams
+                  if len(t.members) < task.max_members and t.id != (my_team.id if my_team else None)]
+    return templates.TemplateResponse(request, "student/group_task.html", {
+        "user": user, "cls": task.class_, "task": task, "my_team": my_team,
+        "classmates": classmates, "open_teams": open_teams,
+        "showcases": task.showcases,
+        "scored": request.query_params.get("scored") == "1",
+        "error": request.query_params.get("error")})
+
+
+@router.post("/groups/tasks/{tid}/teams")
+async def create_group_team(tid: int,
+                            team_name: str = Form(...),
+                            member_ids: list[int] = Form([]),
+                            user: User = Depends(student_dep),
+                            db: Session = Depends(get_db)):
+    task = _get_student_group_task(db, tid, user)
+    if _my_team(task, user.id):
+        raise HTTPException(400, "你已经加入了一个小组，不能再新建")
+    name = team_name.strip()
+    if not name:
+        raise HTTPException(400, "小组名称不能为空")
+    ids: list[int] = []
+    for sid in member_ids:
+        if sid != user.id and sid not in ids:
+            ids.append(sid)
+    if len(ids) + 1 > task.max_members:
+        raise HTTPException(400, f"每组最多 {task.max_members} 人（含队长）")
+    enrolled = {u.id for u in _class_students(db, task.class_id)}
+    taken = {m.student_id for t in task.teams for m in t.members}
+    for sid in ids:
+        if sid not in enrolled:
+            raise HTTPException(400, "只能选择本班同学")
+        if sid in taken:
+            raise HTTPException(400, "有同学已经加入其他小组了")
+    team = GroupTeam(task_id=task.id, name=name[:64], leader_id=user.id)
+    db.add(team)
+    db.flush()
+    db.add(GroupMember(team_id=team.id, student_id=user.id))
+    for sid in ids:
+        db.add(GroupMember(team_id=team.id, student_id=sid))
+    db.commit()
+    return Response(status_code=303,
+                    headers={"Location": f"/student/groups/tasks/{tid}"})
+
+
+@router.post("/groups/tasks/{tid}/teams/{team_id}/join")
+async def join_group_team(tid: int, team_id: int,
+                          user: User = Depends(student_dep),
+                          db: Session = Depends(get_db)):
+    task = _get_student_group_task(db, tid, user)
+    if _my_team(task, user.id):
+        raise HTTPException(400, "你已经加入了一个小组，不能重复加入")
+    team = next((t for t in task.teams if t.id == team_id), None)
+    if not team:
+        raise HTTPException(404, "小组不存在")
+    if len(team.members) >= task.max_members:
+        raise HTTPException(400, "该组人数已满，换一组吧")
+    db.add(GroupMember(team_id=team.id, student_id=user.id))
+    db.commit()
+    return Response(status_code=303,
+                    headers={"Location": f"/student/groups/tasks/{tid}"})
+
+
+@router.post("/groups/tasks/{tid}/submit")
+async def submit_group_work(tid: int,
+                            file: UploadFile | None = File(None),
+                            content: str = Form(""),
+                            note: str = Form(""),
+                            user: User = Depends(student_dep),
+                            db: Session = Depends(get_db)):
+    task = _get_student_group_task(db, tid, user)
+    team = _my_team(task, user.id)
+    if not team:
+        raise HTTPException(400, "请先加入一个小组再提交")
+    if team.leader_id != user.id:
+        raise HTTPException(403, "只有队长可以上传材料")
+
+    filename = "粘贴文本"
+    text = content.strip()
+    if file is not None and file.filename:
+        raw = await file.read()
+        if len(raw) > TEXT_LIMIT:
+            raise HTTPException(400, "文件太大了，上限 200KB")
+        for enc in ("utf-8", "gbk"):
+            try:
+                text = raw.decode(enc)
+                break
+            except UnicodeDecodeError:
+                continue
+        else:
+            raise HTTPException(400, "只支持文本/代码文件（UTF-8 或 GBK）")
+        filename = file.filename[:255]
+    if not text.strip():
+        raise HTTPException(400, "材料内容不能为空：上传文件或粘贴代码都可以")
+    if len(text) > TEXT_LIMIT:
+        raise HTTPException(400, "内容太长，上限 200KB")
+
+    members = "、".join(m.student.username for m in team.members if m.student)
+    result = await run_in_threadpool(
+        ai.score_group_submission, task.title, task.description or "",
+        team.name, members, filename, note.strip(), text)
+    feedback = result["comment"]
+    if result.get("suggestions"):
+        feedback += "\n改进建议：" + result["suggestions"]
+
+    sub = team.submission
+    if sub is None:
+        sub = GroupSubmission(team_id=team.id, submitted_by=user.id)
+        db.add(sub)
+    sub.filename = filename
+    sub.note = note.strip()[:500]
+    sub.content = text
+    sub.submitted_by = user.id
+    sub.ai_score = result["score"]
+    sub.ai_feedback = feedback
+    sub.ai_source = result.get("source", "fallback")
+    sub.submitted_at = datetime.utcnow()
+    db.commit()
+    return Response(status_code=303,
+                    headers={"Location": f"/student/groups/tasks/{tid}?scored=1"})
+
+
+@router.get("/groups/tasks/{tid}/showcase")
+async def student_group_showcase(tid: int, request: Request,
+                                 user: User = Depends(student_dep),
+                                 db: Session = Depends(get_db)):
+    task = _get_student_group_task(db, tid, user)
+    return templates.TemplateResponse(request, "student/group_showcase.html", {
+        "user": user, "cls": task.class_, "task": task,
+        "showcases": task.showcases})

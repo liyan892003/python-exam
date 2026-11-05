@@ -360,6 +360,95 @@ class GameGuess(Base):
     student = relationship("User")
 
 
+# —— 分组作业：任务 / 小组 / 成员 / 提交 / 展演 ——
+
+class GroupTask(Base):
+    """教师在某班级内发布的一次分组作业（如「第 3 周：猜数字程序」）。"""
+    __tablename__ = "group_tasks"
+    id = Column(Integer, primary_key=True)
+    class_id = Column(Integer, ForeignKey("classes.id", ondelete="CASCADE"),
+                      nullable=False, index=True)
+    teacher_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    title = Column(String(128), nullable=False)
+    description = Column(Text, default="")
+    max_members = Column(Integer, default=4)   # 每组人数上限（含队长）
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    class_ = relationship("Class")
+    teams = relationship("GroupTeam", back_populates="task",
+                         cascade="all, delete-orphan", order_by="GroupTeam.id")
+    showcases = relationship("GroupShowcase", back_populates="task",
+                             cascade="all, delete-orphan", order_by="GroupShowcase.position")
+
+
+class GroupTeam(Base):
+    """学生自行组建的小组；leader_id 为创建者（队长）。"""
+    __tablename__ = "group_teams"
+    id = Column(Integer, primary_key=True)
+    task_id = Column(Integer, ForeignKey("group_tasks.id", ondelete="CASCADE"),
+                     nullable=False, index=True)
+    name = Column(String(64), nullable=False)
+    leader_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    task = relationship("GroupTask", back_populates="teams")
+    leader = relationship("User", foreign_keys=[leader_id])
+    members = relationship("GroupMember", back_populates="team",
+                           cascade="all, delete-orphan", order_by="GroupMember.id")
+    submission = relationship("GroupSubmission", back_populates="team",
+                              cascade="all, delete-orphan", uselist=False)
+
+
+class GroupMember(Base):
+    __tablename__ = "group_members"
+    __table_args__ = (UniqueConstraint("team_id", "student_id", name="uq_team_student"),)
+    id = Column(Integer, primary_key=True)
+    team_id = Column(Integer, ForeignKey("group_teams.id", ondelete="CASCADE"),
+                     nullable=False, index=True)
+    student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    joined_at = Column(DateTime, default=datetime.utcnow)
+
+    team = relationship("GroupTeam", back_populates="members")
+    student = relationship("User")
+
+
+class GroupSubmission(Base):
+    """每组一份材料（代码/运行结果文本）。仅队长可提交，重复提交覆盖并重新评分。"""
+    __tablename__ = "group_submissions"
+    id = Column(Integer, primary_key=True)
+    team_id = Column(Integer, ForeignKey("group_teams.id", ondelete="CASCADE"),
+                     nullable=False, unique=True, index=True)
+    filename = Column(String(255), default="")
+    note = Column(Text, default="")
+    content = Column(Text, nullable=False, default="")
+    submitted_by = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    submitted_at = Column(DateTime, default=datetime.utcnow)
+    ai_score = Column(Integer, nullable=True)
+    ai_feedback = Column(Text, default="")
+    ai_source = Column(String(16), default="fallback")   # ai / fallback
+
+    team = relationship("GroupTeam", back_populates="submission")
+
+
+class GroupShowcase(Base):
+    """教师随机抽出的 3 组展演名单（position 1~3）。重抽时整批替换。"""
+    __tablename__ = "group_showcases"
+    __table_args__ = (UniqueConstraint("task_id", "team_id", name="uq_task_team_show"),
+                       UniqueConstraint("task_id", "position", name="uq_task_pos_show"))
+    id = Column(Integer, primary_key=True)
+    task_id = Column(Integer, ForeignKey("group_tasks.id", ondelete="CASCADE"),
+                     nullable=False, index=True)
+    team_id = Column(Integer, ForeignKey("group_teams.id", ondelete="CASCADE"),
+                     nullable=False, index=True)
+    position = Column(Integer, nullable=False)   # 1 = 第一组（上大屏）
+    picked_at = Column(DateTime, default=datetime.utcnow)
+
+    task = relationship("GroupTask", back_populates="showcases")
+    team = relationship("GroupTeam")
+
+
 # —— 排行榜查询辅助 ——
 def class_leaderboard(db, class_id: int):
     """返回该班级学生总分排行 [(rank, user_id, username, score, answered_count)]。

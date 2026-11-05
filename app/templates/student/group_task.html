@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block title %}分组任务 · {{ task.title }}{% endblock %}
+{% block content %}
+<div class="mb-6">
+  <a href="/student/classes/{{ cls.id }}/groups" class="text-sm text-slate-400 hover:text-candy-400">← 返回分组作业</a>
+  <div class="mt-2">
+    <h1 class="text-3xl font-extrabold text-violet-600">🧩 {{ task.title }}</h1>
+    <p class="text-slate-400 text-sm">{{ cls.name }} · {{ task.description or '暂无任务说明' }}</p>
+  </div>
+</div>
+
+{% if error %}
+<div class="mb-4 px-5 py-3 rounded-2xl bg-amber-50 border-2 border-amber-200 text-amber-700 font-bold text-sm">⚠️ {{ error }}</div>
+{% endif %}
+{% if scored %}
+<div class="mb-4 px-5 py-3 rounded-2xl bg-green-50 border-2 border-green-200 text-green-600 font-bold text-sm">✅ 已提交，AI 已完成评分</div>
+{% endif %}
+
+{% if showcases %}
+<a href="/student/groups/tasks/{{ task.id }}/showcase"
+   class="block mb-6 bg-gradient-to-r from-amber-50 via-candy-50 to-violet-50 rounded-4xl p-5 shadow-md border-4 border-amber-200 hover:scale-[1.01] transition transform">
+  <div class="flex items-center justify-between gap-3">
+    <div>
+      <h2 class="text-lg font-extrabold text-amber-600">🎉 优秀作业展演已选出 {{ showcases|length }} 组</h2>
+      <p class="text-xs text-slate-500 mt-1">点进来看看被抽中的小组提交了什么，一起颁奖撒花！</p>
+    </div>
+    <span class="shrink-0 text-3xl">🎊</span>
+  </div>
+</a>
+{% endif %}
+
+{% if my_team %}
+<!-- 我的小组 -->
+<div class="bg-white/85 rounded-4xl p-6 shadow-md mb-5 border-4 border-violet-100">
+  <div class="flex items-start justify-between gap-3 flex-wrap">
+    <div>
+      <div class="flex items-center gap-2 flex-wrap">
+        <h2 class="text-xl font-extrabold text-slate-700">👥 {{ my_team.name }}</h2>
+        {% if my_team.leader_id == user.id %}
+        <span class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-600 text-[11px] font-bold">👑 你是队长</span>
+        {% else %}
+        <span class="px-2 py-0.5 rounded-full bg-sky-100 text-sky2-500 text-[11px] font-bold">队员</span>
+        {% endif %}
+      </div>
+      <p class="text-xs text-slate-400 mt-1">队长：{{ my_team.leader.username if my_team.leader else '—' }} · {{ my_team.members|length }}/{{ task.max_members }} 人</p>
+    </div>
+  </div>
+  <div class="flex flex-wrap gap-2 mt-3">
+    {% for m in my_team.members %}
+    <span class="px-3 py-1 rounded-full bg-violet-50 text-violet-500 text-sm font-bold">
+      {{ m.student.username if m.student else '—' }}
+      <span class="text-[11px] text-slate-400 font-mono">{{ m.student.email if m.student else '' }}</span>
+    </span>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- 提交情况 -->
+{% set sub = my_team.submission %}
+<div class="bg-white/85 rounded-4xl p-6 shadow-md mb-5 border-4 border-dashed border-violet-200">
+  <h2 class="text-xl font-extrabold text-violet-600 mb-3">📤 小组提交材料</h2>
+
+  {% if sub %}
+  <div class="flex items-center gap-4 flex-wrap mb-3">
+    <div class="bg-amber-50 rounded-3xl px-6 py-4 text-center">
+      <div class="text-xs text-slate-400">AI 评分</div>
+      <div class="text-4xl font-extrabold text-amber-500">{{ sub.ai_score }}</div>
+      <div class="text-[10px] text-slate-400">{{ 'DeepSeek 评阅' if sub.ai_source == 'ai' else '规则粗评' }}</div>
+    </div>
+    <div class="flex-1 min-w-[12rem]">
+      <p class="text-sm font-bold text-slate-600">📄 {{ sub.filename or '粘贴文本' }}</p>
+      <p class="text-xs text-slate-400 mt-1">提交时间：{{ sub.submitted_at.strftime('%Y-%m-%d %H:%M') if sub.submitted_at else '—' }}</p>
+      {% if sub.note %}<p class="text-xs text-slate-400 mt-1">说明：{{ sub.note }}</p>{% endif %}
+    </div>
+  </div>
+  <div class="text-sm text-slate-600 bg-amber-50/70 border-2 border-amber-100 rounded-2xl px-4 py-3 whitespace-pre-wrap">{{ sub.ai_feedback }}</div>
+  <details class="mt-3">
+    <summary class="cursor-pointer text-sm font-bold text-sky2-500 select-none">👀 查看已提交内容</summary>
+    <pre class="mt-2 max-h-72 overflow-auto bg-slate-900 text-slate-100 rounded-2xl p-4 text-xs leading-relaxed whitespace-pre-wrap">{{ sub.content }}</pre>
+  </details>
+  {% else %}
+  <p class="text-sm text-slate-400">
+    {% if my_team.leader_id == user.id %}
+    还没有提交材料，把小组的代码或运行结果传上来吧（会自动 AI 评分）。
+    {% else %}
+    队长还没有上传材料，耐心等一下～ 只有队长可以上传。
+    {% endif %}
+  </p>
+  {% endif %}
+
+  {% if my_team.leader_id == user.id %}
+  <form method="post" action="/student/groups/tasks/{{ task.id }}/submit" enctype="multipart/form-data"
+        class="mt-5 space-y-3" onsubmit="this.querySelector('button').disabled = true; this.querySelector('button').textContent = '🤖 AI 评分中，请稍候…';">
+    <div>
+      <label class="block text-xs font-bold text-slate-500 mb-1">上传代码 / 运行结果文件（txt、py、md 等文本文件）</label>
+      <input type="file" name="file" accept=".py,.txt,.md,.json,.csv,.java,.c,.cpp,.html,.js,.log"
+             class="w-full text-sm file:mr-3 file:px-4 file:py-2 file:rounded-xl file:border-0 file:bg-violet-100 file:text-violet-600 file:font-bold bg-violet-50/40 rounded-2xl p-2 border-2 border-violet-100">
+    </div>
+    <div class="text-center text-xs text-slate-400">—— 或直接粘贴 ——</div>
+    <textarea name="content" rows="8" placeholder="把代码或运行结果粘贴在这里…"
+              class="w-full px-4 py-3 rounded-2xl border-2 border-violet-100 focus:border-violet-400 outline-none transition bg-violet-50/40 font-mono text-sm"></textarea>
+    <input type="text" name="note" placeholder="选填：小组说明（做了什么、遇到什么问题）"
+           class="w-full px-4 py-3 rounded-2xl border-2 border-violet-100 focus:border-violet-400 outline-none transition bg-violet-50/40 text-sm">
+    <div class="flex items-center justify-between gap-3 flex-wrap">
+      <p class="text-[11px] text-slate-400">文件与粘贴同时提供时，以文件为准；重复提交会覆盖旧材料并重新评分。</p>
+      <button class="px-6 py-3 rounded-2xl bg-violet-400 text-white font-bold shadow-lg hover:bg-violet-500 hover:scale-105 transition transform whitespace-nowrap">
+        📤 提交并让 AI 评分
+      </button>
+    </div>
+  </form>
+  {% endif %}
+</div>
+{% else %}
+<!-- 还没组队 -->
+<div class="bg-white/85 rounded-4xl p-6 shadow-md mb-5 border-4 border-dashed border-violet-200">
+  <h2 class="text-xl font-extrabold text-violet-600 mb-1">➕ 创建我的小组</h2>
+  <p class="text-xs text-slate-400 mb-3">填个组名，勾选想一起组队的本班同学（可留空，之后再让同学加入）。</p>
+  <form method="post" action="/student/groups/tasks/{{ task.id }}/teams" class="space-y-3">
+    <input type="text" name="team_name" required maxlength="64" placeholder="小组名称，如：Python 三剑客"
+           class="w-full px-4 py-3 rounded-2xl border-2 border-violet-100 focus:border-violet-400 outline-none transition bg-violet-50/40">
+    {% if classmates %}
+    <div class="max-h-52 overflow-y-auto bg-violet-50/40 rounded-2xl border-2 border-violet-100 p-3 grid sm:grid-cols-2 gap-2">
+      {% for s in classmates %}
+      <label class="flex items-center gap-2 px-3 py-2 bg-white rounded-xl text-sm font-bold text-slate-600 cursor-pointer">
+        <input type="checkbox" name="member_ids" value="{{ s.id }}" class="w-4 h-4 accent-violet-500">
+        {{ s.username }} <span class="text-[11px] text-slate-400 font-mono">{{ s.email }}</span>
+      </label>
+      {% endfor %}
+    </div>
+    <p class="text-[11px] text-slate-400">最多还能再选 {{ task.max_members - 1 }} 人（含队长共 {{ task.max_members }} 人）</p>
+    {% else %}
+    <p class="text-xs text-slate-400">暂时没有可组队的同学（其他人可能已经在小组里了），先自己建组吧。</p>
+    {% endif %}
+    <button class="px-6 py-3 rounded-2xl bg-violet-400 text-white font-bold shadow-lg hover:bg-violet-500 hover:scale-105 transition transform">
+      🧑‍🤝‍🧑 建组
+    </button>
+  </form>
+</div>
+
+<!-- 加入已有小组 -->
+<div class="bg-white/85 rounded-4xl p-6 shadow-md mb-5 border-4 border-dashed border-sky-200">
+  <h2 class="text-xl font-extrabold text-sky2-500 mb-1">🔗 加入已有小组</h2>
+  <p class="text-xs text-slate-400 mb-3">小组还没满员的话，点「加入」就能和同学一起做。</p>
+  {% if open_teams %}
+  <div class="space-y-2">
+    {% for tm in open_teams %}
+    <div class="flex items-center justify-between gap-3 bg-sky-50/60 rounded-2xl px-4 py-3 flex-wrap">
+      <div class="min-w-0">
+        <p class="font-extrabold text-slate-700 truncate">{{ tm.name }}</p>
+        <p class="text-[11px] text-slate-400">
+          队长 {{ tm.leader.username if tm.leader else '—' }} · {{ tm.members|length }}/{{ task.max_members }} 人 ·
+          {% for m in tm.members %}{{ m.student.username if m.student else '' }}{{ '、' if not loop.last }}{% endfor %}
+        </p>
+      </div>
+      <form method="post" action="/student/groups/tasks/{{ task.id }}/teams/{{ tm.id }}/join">
+        <button class="px-4 py-2 rounded-xl bg-sky-100 text-sky2-500 text-sm font-bold hover:bg-sky-200 transition">加入 →</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="text-sm text-slate-400">暂时没有可加入的小组，先自己建一个吧～</p>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

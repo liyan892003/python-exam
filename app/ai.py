@@ -319,3 +319,83 @@ is_correct 表示该陈述本身是否正确（即正确答案是"对"还是"错
             last_err = e
             break
     raise ValueError(f"AI 生成判断题失败：{last_err}")
+
+
+# —— 分组作业 AI 评分 ——
+
+_GROUP_SCORE_SYSTEM = """你是高校《Python 程序设计》课程的评阅老师，学生是大二本科生。请阅读小组提交的代码/运行结果，按下列维度评分：
+1. 正确性：逻辑是否正确、能否得到预期结果（40 分）
+2. 完整性与需求达成：功能是否覆盖任务要求（25 分）
+3. 代码规范与可读性：命名、结构、注释、可维护性（20 分）
+4. 计算思维：问题分解、边界处理、复用与抽象（15 分）
+
+要求：
+- 总分 0~100 的整数；comments 与 suggestions 用中文，专业、具体，指出代码中的实际问题。
+- 不要空泛鼓励。只输出严格 JSON，不要任何额外文字：
+{{"score": 85, "comment": "总体评价，指出亮点与主要问题（<=120字）", "suggestions": "2 条可执行的改进建议（<=120字）"}}"""
+
+
+def _fallback_group_score(content: str) -> dict:
+    """无 API / 调用失败时的规则粗评（保证上传流程不中断）。"""
+    text = content or ""
+    n_lines = len([ln for ln in text.splitlines() if ln.strip()])
+    score = 55
+    hits = []
+    if "def " in text:
+        score += 8; hits.append("使用函数封装")
+    if "class " in text:
+        score += 5; hits.append("使用类")
+    if any(k in text for k in ("for ", "while ")):
+        score += 6; hits.append("使用循环")
+    if any(k in text for k in ("if ", "elif ", "else")):
+        score += 4; hits.append("有条件判断")
+    if "try:" in text or "except" in text:
+        score += 4; hits.append("有异常处理")
+    if "#" in text:
+        score += 3; hits.append("有注释")
+    if n_lines >= 15:
+        score += 8
+    elif n_lines >= 5:
+        score += 4
+    if any(k in text for k in ("print(", "input(")):
+        score += 3
+    score = min(score, 95)
+    comment = ("未接入 AI（DEEPSEEK_API_KEY 未配置或调用失败），按代码特征粗评："
+               + ("；".join(hits) if hits else "内容较短，暂未识别到结构化代码")
+               + f"。共 {n_lines} 行有效代码。")
+    suggestions = "1. 按任务要求逐条自测，附上运行结果；2. 补充关键步骤注释并统一命名规范。"
+    return {"score": score, "comment": comment[:300], "suggestions": suggestions,
+            "source": "fallback"}
+
+
+def score_group_submission(title: str, description: str, team_name: str,
+                           members: str, filename: str, note: str,
+                           content: str) -> dict:
+    """给一组的分组作业打分。返回 {score, comment, suggestions, source}；异常降级规则评分。"""
+    content = (content or "")[:6000]
+    if not settings.DEEPSEEK_API_KEY:
+        return _fallback_group_score(content)
+    user_prompt = (f"作业任务：{title}\n任务说明：{description or '（无）'}\n"
+                   f"小组名称：{team_name}\n组员：{members or '（未知）'}\n"
+                   f"提交文件：{filename or '（直接粘贴文本）'}\n"
+                   f"小组说明：{note or '（无）'}\n\n提交内容：\n{content}\n\n请评分并输出 JSON。")
+    try:
+        client = _client()
+        resp = client.chat.completions.create(
+            model=settings.DEEPSEEK_MODEL,
+            messages=[{"role": "user",
+                       "content": _GROUP_SCORE_SYSTEM + "\n\n" + user_prompt}],
+            response_format={"type": "json_object"},
+            temperature=0.2,
+            timeout=40,
+        )
+        data = json.loads(resp.choices[0].message.content or "{}")
+        score = int(data.get("score"))
+        if not (0 <= score <= 100):
+            raise ValueError("score 越界")
+        return {"score": score,
+                "comment": str(data.get("comment", "")).strip()[:300],
+                "suggestions": str(data.get("suggestions", "")).strip()[:300],
+                "source": "ai"}
+    except Exception:
+        return _fallback_group_score(content)

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>大屏展演 · 第 {{ us.position }} 组 · {{ team.name }}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    html, body { height: 100%; }
+    body { background: radial-gradient(circle at 20% 15%, #1e293b 0%, #0b1220 55%, #05080f 100%); }
+    .glow { box-shadow: 0 0 0 4px rgba(251, 191, 36, .18), 0 20px 60px rgba(0,0,0,.45); }
+    pre.code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .fade-in { animation: fadeIn .6s ease both; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+  </style>
+</head>
+<body class="text-slate-100">
+  <div class="min-h-screen flex flex-col px-8 py-6 gap-6">
+
+    <header class="flex items-start justify-between gap-6 fade-in">
+      <div>
+        <div class="text-sm tracking-widest text-amber-300 font-extrabold">🎉 优秀作业展演 · {{ task.title }}</div>
+        <h1 class="mt-2 text-5xl md:text-6xl font-black leading-tight">
+          <span class="text-amber-300">第 {{ us.position }} 组</span>
+          <span class="text-white">{{ team.name }}</span>
+        </h1>
+        <div class="mt-3 flex flex-wrap items-center gap-2">
+          <span class="px-3 py-1 rounded-full bg-amber-400/20 text-amber-200 text-sm font-bold">👑 队长 {{ team.leader.username if team.leader else '—' }}</span>
+          {% for m in team.members %}
+          <span class="px-3 py-1 rounded-full bg-white/10 text-slate-200 text-sm font-bold">{{ m.student.username if m.student else '—' }}</span>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="shrink-0 text-center bg-white/5 rounded-3xl px-8 py-5 border border-white/10 glow">
+        <div class="text-xs text-slate-400 tracking-widest">AI 评分</div>
+        <div class="text-6xl font-black text-amber-300 leading-none mt-1">{{ team.submission.ai_score if team.submission else '—' }}</div>
+        <div class="text-[11px] text-slate-500 mt-2">
+          {{ 'DeepSeek 评阅' if team.submission and team.submission.ai_source == 'ai' else '规则粗评' }}
+        </div>
+      </div>
+    </header>
+
+    <main class="flex-1 grid lg:grid-cols-5 gap-6 min-h-0">
+      <section class="lg:col-span-3 bg-white/5 border border-white/10 rounded-3xl p-6 min-h-0 flex flex-col fade-in">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-lg font-extrabold text-sky-300">📄 {{ team.submission.filename if team.submission and team.submission.filename else '提交内容' }}</h2>
+          {% if team.submission and team.submission.note %}
+          <span class="text-xs text-slate-400 truncate max-w-[50%]">{{ team.submission.note }}</span>
+          {% endif %}
+        </div>
+        <pre class="code flex-1 overflow-auto text-[15px] md:text-[17px] leading-relaxed bg-black/30 rounded-2xl p-5 whitespace-pre-wrap">{{ team.submission.content if team.submission else '该组没有提交内容' }}</pre>
+      </section>
+
+      <aside class="lg:col-span-2 flex flex-col gap-4 min-h-0 fade-in">
+        <div class="bg-white/5 border border-white/10 rounded-3xl p-6">
+          <h2 class="text-lg font-extrabold text-amber-300 mb-3">🧠 AI 评阅意见</h2>
+          <p class="text-slate-200 leading-relaxed whitespace-pre-wrap text-[15px] md:text-[16px]">
+            {{ team.submission.ai_feedback if team.submission else '暂无评阅意见' }}
+          </p>
+        </div>
+        <div class="bg-white/5 border border-white/10 rounded-3xl p-6 text-sm text-slate-400 leading-relaxed">
+          <p>任务说明：{{ task.description or '暂无' }}</p>
+          <p class="mt-2">提交时间：{{ team.submission.submitted_at.strftime('%Y-%m-%d %H:%M') if team.submission and team.submission.submitted_at else '—' }}</p>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="flex items-center justify-between gap-3">
+      <div class="text-xs text-slate-500">按 F 全屏 / Esc 退出全屏</div>
+      <div class="flex items-center gap-3">
+        <button onclick="toggleFullscreen()"
+                class="px-6 py-3 rounded-2xl bg-amber-400 text-slate-900 font-extrabold hover:bg-amber-300 transition">
+          🖥️ 全屏展示
+        </button>
+        <a href="/teacher/groups/tasks/{{ task.id }}"
+           class="px-6 py-3 rounded-2xl bg-white/10 text-slate-200 font-bold hover:bg-white/20 transition">← 返回任务</a>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    function toggleFullscreen() {
+      if (document.fullscreenElement) {
+        document.exitFullscreen && document.exitFullscreen();
+      } else if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen();
+      }
+    }
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'f' || e.key === 'F') toggleFullscreen();
+    });
+  </script>
+</body>
+</html>

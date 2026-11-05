@@ -19,7 +19,8 @@ from ..deps import templates, require_role
 from ..security import hash_password_async
 from ..models import (User, Class, ProblemSet, Question, Choice, Enrollment, Answer,
                       KnowledgePoint, QType, QuestionSource, Role, class_leaderboard,
-                      GameSession, GameStatus, GamePlayer, GameGuess)
+                      GameSession, GameStatus, GamePlayer, GameGuess,
+                      GroupTask, GroupTeam, GroupMember, GroupSubmission, GroupShowcase)
 from .. import number_guess
 
 router = APIRouter(prefix="/teacher", tags=["teacher"])
@@ -675,3 +676,115 @@ async def game_board_delete(sid: int,
     db.delete(session)
     db.commit()
     return Response(status_code=303, headers={"Location": "/teacher/games"})
+
+
+# —— 分组作业：任务管理 / 随机抽 3 组 / 大屏展演 ——
+
+def _get_owned_group_task(db: Session, tid: int, user: User) -> GroupTask:
+    t = (db.query(GroupTask)
+         .options(selectinload(GroupTask.teams).selectinload(GroupTeam.members)
+                  .selectinload(GroupMember.student),
+                  selectinload(GroupTask.teams).selectinload(GroupTeam.leader),
+                  selectinload(GroupTask.teams).selectinload(GroupTeam.submission),
+                  selectinload(GroupTask.showcases).selectinload(GroupShowcase.team))
+         .filter(GroupTask.id == tid, GroupTask.teacher_id == user.id).first())
+    if not t:
+        raise HTTPException(404, "分组任务不存在")
+    return t
+
+
+def _task_stats(task: GroupTask) -> dict:
+    return {"n_teams": len(task.teams),
+            "n_submitted": sum(1 for t in task.teams if t.submission),
+            "n_showcase": len(task.showcases)}
+
+
+@router.get("/classes/{cid}/groups")
+async def group_tasks(cid: int, request: Request,
+                      user: User = Depends(teacher_dep),
+                      db: Session = Depends(get_db)):
+    cls = _get_owned_class(db, cid, user)
+    tasks = (db.query(GroupTask)
+             .options(selectinload(GroupTask.teams).selectinload(GroupTeam.submission),
+                      selectinload(GroupTask.showcases))
+             .filter(GroupTask.class_id == cid)
+             .order_by(GroupTask.created_at.desc()).all())
+    return templates.TemplateResponse(request, "teacher/group_tasks.html", {
+        "user": user, "cls": cls, "tasks": tasks,
+        "stats": {t.id: _task_stats(t) for t in tasks}})
+
+
+@router.post("/classes/{cid}/groups")
+async def create_group_task(cid: int,
+                            title: str = Form(...),
+                            description: str = Form(""),
+                            max_members: int = Form(4),
+                            user: User = Depends(teacher_dep),
+                            db: Session = Depends(get_db)):
+    cls = _get_owned_class(db, cid, user)
+    title = title.strip()
+    if not title:
+        raise HTTPException(400, "任务名称不能为空")
+    max_members = max(2, min(8, max_members))
+    t = GroupTask(class_id=cls.id, teacher_id=user.id, title=title[:128],
+                  description=description.strip(), max_members=max_members)
+    db.add(t)
+    db.commit()
+    db.refresh(t)
+    return Response(status_code=303,
+                    headers={"Location": f"/teacher/groups/tasks/{t.id}"})
+
+
+@router.get("/groups/tasks/{tid}")
+async def group_task_detail(tid: int, request: Request,
+                            user: User = Depends(teacher_dep),
+                            db: Session = Depends(get_db)):
+    task = _get_owned_group_task(db, tid, user)
+    return templates.TemplateResponse(request, "teacher/group_task.html", {
+        "user": user, "cls": task.class_, "task": task,
+        "stats": _task_stats(task),
+        "drawn": request.query_params.get("drawn") == "1",
+        "error": request.query_params.get("error")})
+
+
+@router.post("/groups/tasks/{tid}/draw")
+async def draw_group_showcase(tid: int,
+                              user: User = Depends(teacher_dep),
+                              db: Session = Depends(get_db)):
+    """从「已提交材料」的小组里随机抽 3 组（不足 3 组则全抽）。"""
+    task = _get_owned_group_task(db, tid, user)
+    submitted = [t for t in task.teams if t.submission]
+    if not submitted:
+        return Response(status_code=303, headers={
+            "Location": f"/teacher/groups/tasks/{tid}?error=还没有小组提交材料"})
+    picked = random.sample(submitted, min(3, len(submitted)))
+    db.query(GroupShowcase).filter(GroupShowcase.task_id == task.id).delete()
+    for pos, team in enumerate(picked, 1):
+        db.add(GroupShowcase(task_id=task.id, team_id=team.id, position=pos))
+    db.commit()
+    return Response(status_code=303,
+                    headers={"Location": f"/teacher/groups/tasks/{tid}?drawn=1"})
+
+
+@router.post("/groups/tasks/{tid}/delete")
+async def delete_group_task(tid: int,
+                            user: User = Depends(teacher_dep),
+                            db: Session = Depends(get_db)):
+    task = _get_owned_group_task(db, tid, user)
+    cid = task.class_id
+    db.delete(task)
+    db.commit()
+    return Response(status_code=303,
+                    headers={"Location": f"/teacher/classes/{cid}/groups"})
+
+
+@router.get("/groups/tasks/{tid}/screen/{pos}")
+async def group_big_screen(tid: int, pos: int, request: Request,
+                           user: User = Depends(teacher_dep),
+                           db: Session = Depends(get_db)):
+    task = _get_owned_group_task(db, tid, user)
+    show = next((s for s in task.showcases if s.position == pos), None)
+    if not show:
+        raise HTTPException(404, "该组还没有被抽出")
+    return templates.TemplateResponse(request, "teacher/group_bigscreen.html", {
+        "user": user, "task": task, "us": show, "team": show.team})
