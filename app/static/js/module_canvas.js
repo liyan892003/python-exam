@@ -38,6 +38,7 @@
       this.readonly = root.dataset.readonly === "1";
       this.saveUrl = root.dataset.saveUrl || "";
       this.canvas = root.querySelector("[data-canvas]");
+      this.world = root.querySelector("[data-world]");
       this.svg = root.querySelector("[data-svg]");
       this.layer = root.querySelector("[data-nodes]");
       this.inspector = root.querySelector("[data-inspector]");
@@ -118,7 +119,27 @@
     }
 
     canvasWidth() {
-      return Math.max(this.canvas ? this.canvas.clientWidth : 0, 320);
+      const worldW = this.world ? this.world.offsetWidth : 0;
+      return Math.max(worldW, this.canvas ? this.canvas.clientWidth : 0, 320);
+    }
+
+    /* 画布可视区固定高度，内容超出时让内部"世界"变大并出现滚动条 */
+    updateWorldSize() {
+      if (!this.world) return;
+      // 预留 18px 给滚动条，避免出现横竖两条滚动条互相挤压
+      const baseW = Math.max((this.canvas ? this.canvas.clientWidth : 0) - 18, 900);
+      const baseH = Math.max((this.canvas ? this.canvas.clientHeight : 0) - 18, 700);
+      let maxX = baseW;
+      let maxY = baseH;
+      this.nodes.forEach((n) => {
+        const el = n._el;
+        const w = el ? el.offsetWidth : NODE_W;
+        const h = el ? el.offsetHeight : 60;
+        maxX = Math.max(maxX, n.x + w + 90);
+        maxY = Math.max(maxY, n.y + h + 120);
+      });
+      this.world.style.width = Math.round(maxX) + "px";
+      this.world.style.height = Math.round(maxY) + "px";
     }
 
     toJSON() {
@@ -219,6 +240,7 @@
         this.layer.appendChild(el);
         n._el = el;
       });
+      this.updateWorldSize();
     }
 
     nodeRect(n) {
@@ -483,14 +505,18 @@
         });
       }
       this.canvas.addEventListener("pointerdown", (e) => {
-        if (e.target === this.canvas || e.target === this.svg) {
+        if (e.target === this.canvas || e.target === this.world ||
+            e.target === this.svg || e.target === this.layer) {
           this.selectedId = null;
           this.renderInspector();
           this.renderNodes();
           this.renderEdges();
         }
       });
-      window.addEventListener("resize", () => this.renderEdges());
+      window.addEventListener("resize", () => {
+        this.updateWorldSize();
+        this.renderEdges();
+      });
     }
 
     onNodePointerDown(e, node) {
@@ -515,13 +541,14 @@
         const dx = ev.clientX - startX;
         const dy = ev.clientY - startY;
         if (Math.abs(dx) + Math.abs(dy) > 3) moved = true;
-        const maxX = Math.max(0, this.canvas.clientWidth - NODE_W);
-        node.x = Math.min(Math.max(0, originX + dx), maxX);
-        node.y = Math.max(0, originY + dy);
+        // 允许拖到可视区外，画布会自动变大并出现滚动条
+        node.x = Math.min(Math.max(0, originX + dx), 4000);
+        node.y = Math.min(Math.max(0, originY + dy), 4000);
         if (node._el) {
           node._el.style.left = node.x + "px";
           node._el.style.top = node.y + "px";
         }
+        this.updateWorldSize();
         this.renderEdges();
       };
       const onUp = () => {
