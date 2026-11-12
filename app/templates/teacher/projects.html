@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}实践项目 · {{ cls.name }}{% endblock %}
+{% block content %}
+<div class="mb-6">
+  <a href="/teacher/classes/{{ cls.id }}" class="text-sm text-slate-400 hover:text-candy-400">← 返回班级</a>
+  <h1 class="text-3xl font-extrabold text-violet-600 mt-2">🧩 实践项目 · 模块化设计</h1>
+  <p class="text-slate-400 text-sm">{{ cls.name }} · 先画模块设计图，再补全代码，把「怎么拆函数」变成看得见的图</p>
+</div>
+
+<!-- 新建项目 -->
+<div class="bg-white/85 rounded-4xl p-6 shadow-md mb-6 border-4 border-dashed border-violet-200">
+  <h2 class="text-xl font-extrabold text-violet-600 mb-1">➕ 新建实践项目</h2>
+  <p class="text-xs text-slate-400 mb-4">项目固定两步：① 学生在画布上拖模块、连线、标注传递的参数；② 系统按图生成函数骨架，学生补全代码。</p>
+  <form method="post" action="/teacher/classes/{{ cls.id }}/projects" class="space-y-3">
+    <div class="flex flex-col sm:flex-row gap-3">
+      <input type="text" name="title" required placeholder="项目名称，如：模拟 n 局篮球比赛"
+             class="flex-1 px-4 py-3 rounded-2xl border-2 border-violet-100 focus:border-violet-400 outline-none transition bg-violet-50/40">
+      <input type="text" name="description" placeholder="选填：项目说明 / 题目背景"
+             class="flex-1 px-4 py-3 rounded-2xl border-2 border-violet-100 focus:border-violet-400 outline-none transition bg-violet-50/40">
+    </div>
+    <div class="grid md:grid-cols-2 gap-3">
+      <div class="bg-violet-50/60 rounded-2xl p-3">
+        <input type="text" name="design_title" placeholder="第一步标题（留空用「第一步：画模块设计图」）"
+               class="w-full px-3 py-2 rounded-xl border-2 border-violet-100 focus:border-violet-400 outline-none text-sm bg-white/80 mb-2">
+        <textarea name="design_desc" rows="2" placeholder="第一步要求，如：把程序拆成 main + 4 个函数，并在箭头旁写清传什么参数"
+                  class="w-full px-3 py-2 rounded-xl border-2 border-violet-100 focus:border-violet-400 outline-none text-sm bg-white/80"></textarea>
+      </div>
+      <div class="bg-sky-50/60 rounded-2xl p-3">
+        <input type="text" name="code_title" placeholder="第二步标题（留空用「第二步：补全代码」）"
+               class="w-full px-3 py-2 rounded-xl border-2 border-sky-100 focus:border-sky-400 outline-none text-sm bg-white/80 mb-2">
+        <textarea name="code_desc" rows="2" placeholder="第二步要求，如：补全每个函数体并运行通过"
+                  class="w-full px-3 py-2 rounded-xl border-2 border-sky-100 focus:border-sky-400 outline-none text-sm bg-white/80"></textarea>
+      </div>
+    </div>
+    <button class="px-6 py-3 rounded-2xl bg-violet-400 text-white font-bold shadow-lg hover:bg-violet-500 hover:scale-105 transition transform">➕ 创建项目</button>
+  </form>
+</div>
+
+<h2 class="text-xl font-extrabold text-slate-600 mb-3">📚 项目列表（{{ rows|length }}）</h2>
+{% if rows %}
+<div class="space-y-3">
+  {% for r in rows %}
+  <div class="bg-white/85 rounded-4xl p-5 shadow-md">
+    <div class="flex items-start justify-between gap-3 flex-wrap">
+      <a href="/teacher/projects/{{ r.project.id }}" class="min-w-0 flex-1">
+        <h3 class="text-lg font-extrabold text-slate-700">🧩 {{ r.project.title }}</h3>
+        <p class="text-xs text-slate-400 mt-1">{{ r.project.description or '暂无说明' }}</p>
+        <div class="flex flex-wrap gap-2 mt-2 text-[11px] font-bold">
+          <span class="px-2 py-0.5 rounded-full bg-violet-50 text-violet-500">① {{ r.project.design_title }}</span>
+          <span class="px-2 py-0.5 rounded-full bg-sky-50 text-sky2-500">② {{ r.project.code_title }}</span>
+        </div>
+      </a>
+      <div class="flex items-center gap-4">
+        <div class="text-center">
+          <div class="text-xl font-extrabold text-violet-500">{{ r.n_design }}/{{ r.n_students }}</div>
+          <div class="text-[10px] text-slate-400">画了设计图</div>
+        </div>
+        <div class="text-center">
+          <div class="text-xl font-extrabold text-green-500">{{ r.n_code }}/{{ r.n_students }}</div>
+          <div class="text-[10px] text-slate-400">提交代码</div>
+        </div>
+        <form method="post" action="/teacher/projects/{{ r.project.id }}/delete"
+              onsubmit="return confirm('删除项目「{{ r.project.title }}」？学生的设计图和代码会一起删除。');">
+          <button class="px-3 py-2 rounded-2xl bg-red-50 text-red-400 text-xs font-bold hover:bg-red-100 transition">🗑️</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-12 bg-white/60 rounded-4xl">
+  <div class="text-5xl mb-3">🧩</div>
+  <p class="text-slate-400">还没有实践项目，用上面的表单建一个吧</p>
+</div>
+{% endif %}
+{% endblock %}

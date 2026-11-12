@@ -20,7 +20,8 @@ from ..security import hash_password_async
 from ..models import (User, Class, ProblemSet, Question, Choice, Enrollment, Answer,
                       KnowledgePoint, QType, QuestionSource, Role, class_leaderboard,
                       GameSession, GameStatus, GamePlayer, GameGuess,
-                      GroupTask, GroupTeam, GroupMember, GroupSubmission, GroupShowcase)
+                      GroupTask, GroupTeam, GroupMember, GroupSubmission, GroupShowcase,
+                      PracticeProject, ProjectWork)
 from .. import number_guess
 
 router = APIRouter(prefix="/teacher", tags=["teacher"])
@@ -819,3 +820,100 @@ async def group_big_screen(tid: int, pos: int, request: Request,
         raise HTTPException(404, "该组还没有被抽出")
     return templates.TemplateResponse(request, "teacher/group_bigscreen.html", {
         "user": user, "task": task, "us": show, "team": show.team})
+
+
+# —— 实践项目：模块化设计（先画模块图，再补全代码） ——
+
+def _get_owned_project(db: Session, pid: int, user: User) -> PracticeProject:
+    p = (db.query(PracticeProject)
+         .filter(PracticeProject.id == pid, PracticeProject.teacher_id == user.id).first())
+    if not p:
+        raise HTTPException(404, "实践项目不存在")
+    return p
+
+
+@router.get("/classes/{cid}/projects")
+async def class_projects(cid: int, request: Request,
+                         user: User = Depends(teacher_dep),
+                         db: Session = Depends(get_db)):
+    cls = _get_owned_class(db, cid, user)
+    n_students = db.query(Enrollment).filter(Enrollment.class_id == cid).count()
+    projects = (db.query(PracticeProject)
+                .options(selectinload(PracticeProject.works))
+                .filter(PracticeProject.class_id == cid)
+                .order_by(PracticeProject.created_at.desc()).all())
+    rows = [{"project": p, "n_students": n_students,
+             "n_design": sum(1 for w in p.works if w.diagram),
+             "n_code": sum(1 for w in p.works if w.submitted_at)} for p in projects]
+    return templates.TemplateResponse(request, "teacher/projects.html", {
+        "user": user, "cls": cls, "rows": rows, "n_students": n_students})
+
+
+@router.post("/classes/{cid}/projects")
+async def create_project(cid: int,
+                         title: str = Form(...),
+                         description: str = Form(""),
+                         design_title: str = Form(""),
+                         design_desc: str = Form(""),
+                         code_title: str = Form(""),
+                         code_desc: str = Form(""),
+                         user: User = Depends(teacher_dep),
+                         db: Session = Depends(get_db)):
+    cls = _get_owned_class(db, cid, user)
+    title = title.strip()
+    if len(title) < 2:
+        raise HTTPException(400, "项目名称至少 2 个字")
+    p = PracticeProject(
+        class_id=cls.id, teacher_id=user.id, title=title,
+        description=description.strip(),
+        design_title=design_title.strip() or "第一步：画模块设计图",
+        design_desc=design_desc.strip(),
+        code_title=code_title.strip() or "第二步：补全代码",
+        code_desc=code_desc.strip(),
+    )
+    db.add(p)
+    db.commit()
+    db.refresh(p)
+    return Response(status_code=303,
+                    headers={"Location": f"/teacher/projects/{p.id}"})
+
+
+@router.get("/projects/{pid}")
+async def project_detail(pid: int, request: Request,
+                         user: User = Depends(teacher_dep),
+                         db: Session = Depends(get_db)):
+    p = _get_owned_project(db, pid, user)
+    students = (db.query(User)
+                .join(Enrollment, Enrollment.student_id == User.id)
+                .filter(Enrollment.class_id == p.class_id, User.role == Role.student)
+                .order_by(User.email).all())
+    works = {w.student_id: w for w in p.works}
+    rows = [{"student": s, "work": works.get(s.id)} for s in students]
+    return templates.TemplateResponse(request, "teacher/project.html", {
+        "user": user, "cls": p.class_, "project": p, "rows": rows,
+        "n_design": sum(1 for w in p.works if w.diagram),
+        "n_code": sum(1 for w in p.works if w.submitted_at)})
+
+
+@router.post("/projects/{pid}/delete")
+async def delete_project(pid: int,
+                         user: User = Depends(teacher_dep),
+                         db: Session = Depends(get_db)):
+    p = _get_owned_project(db, pid, user)
+    cid = p.class_id
+    db.delete(p)
+    db.commit()
+    return Response(status_code=303,
+                    headers={"Location": f"/teacher/classes/{cid}/projects"})
+
+
+@router.get("/projects/{pid}/works/{wid}")
+async def project_work_detail(pid: int, wid: int, request: Request,
+                              user: User = Depends(teacher_dep),
+                              db: Session = Depends(get_db)):
+    p = _get_owned_project(db, pid, user)
+    work = next((w for w in p.works if w.id == wid), None)
+    if not work:
+        raise HTTPException(404, "作品不存在")
+    return templates.TemplateResponse(request, "teacher/project_work.html", {
+        "user": user, "cls": p.class_, "project": p, "work": work})

@@ -7,6 +7,7 @@
   试卷全部答完 → 自动跳转该班级排行榜（含烟花/奖杯动画）
 """
 from datetime import datetime
+import json
 
 from fastapi import APIRouter, Depends, Request, Response, Form, HTTPException, UploadFile, File
 from fastapi.responses import JSONResponse
@@ -17,9 +18,11 @@ from ..db import get_db
 from ..deps import templates, require_role
 from ..models import (User, Class, Enrollment, ProblemSet, Question, Choice, Answer,
                       Role, GameSession, GameStatus, GamePlayer, GameGuess,
-                      GroupTask, GroupTeam, GroupMember, GroupSubmission, GroupShowcase)
+                      GroupTask, GroupTeam, GroupMember, GroupSubmission, GroupShowcase,
+                      PracticeProject, ProjectWork)
 from ..achievements import evaluate_achievements
 from .. import number_guess, ai
+from ..project_design import build_skeleton
 
 router = APIRouter(prefix="/student", tags=["student"])
 student_dep = require_role(Role.student)
@@ -607,3 +610,127 @@ async def student_group_showcase(tid: int, request: Request,
     return templates.TemplateResponse(request, "student/group_showcase.html", {
         "user": user, "cls": task.class_, "task": task,
         "showcases": task.showcases})
+
+
+# —— 实践项目：模块化设计（画模块图 → 补全代码） ——
+
+MAX_DIAGRAM_BYTES = 60_000
+MAX_CODE_BYTES = 200_000
+
+
+def _get_student_project(db: Session, pid: int, user: User) -> PracticeProject:
+    p = db.query(PracticeProject).filter(PracticeProject.id == pid).first()
+    if not p:
+        raise HTTPException(404, "实践项目不存在")
+    _ensure_enrolled(db, p.class_id, user)
+    return p
+
+
+def _get_or_create_work(db: Session, project: PracticeProject,
+                        user: User) -> ProjectWork:
+    w = (db.query(ProjectWork)
+         .filter(ProjectWork.project_id == project.id,
+                 ProjectWork.student_id == user.id).first())
+    if not w:
+        w = ProjectWork(project_id=project.id, student_id=user.id)
+        db.add(w)
+        db.commit()
+        db.refresh(w)
+    return w
+
+
+@router.get("/classes/{cid}/projects")
+async def student_projects(cid: int, request: Request,
+                           user: User = Depends(student_dep),
+                           db: Session = Depends(get_db)):
+    cls = _ensure_enrolled(db, cid, user)
+    projects = (db.query(PracticeProject)
+                .filter(PracticeProject.class_id == cid)
+                .order_by(PracticeProject.created_at.desc()).all())
+    works = {}
+    if projects:
+        works = {w.project_id: w for w in
+                 db.query(ProjectWork)
+                 .filter(ProjectWork.student_id == user.id,
+                         ProjectWork.project_id.in_([p.id for p in projects])).all()}
+    rows = [{"project": p, "work": works.get(p.id)} for p in projects]
+    return templates.TemplateResponse(request, "student/projects.html", {
+        "user": user, "cls": cls, "rows": rows})
+
+
+@router.get("/projects/{pid}")
+async def student_project(pid: int, request: Request,
+                          user: User = Depends(student_dep),
+                          db: Session = Depends(get_db)):
+    p = _get_student_project(db, pid, user)
+    w = _get_or_create_work(db, p, user)
+    return templates.TemplateResponse(request, "student/project.html", {
+        "user": user, "cls": p.class_, "project": p, "work": w,
+        "saved": request.query_params.get("saved") == "1",
+        "error": request.query_params.get("error")})
+
+
+@router.post("/projects/{pid}/diagram")
+async def save_project_diagram(pid: int, request: Request,
+                               user: User = Depends(student_dep),
+                               db: Session = Depends(get_db)):
+    p = _get_student_project(db, pid, user)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "设计图数据格式不正确")
+    diagram = body.get("diagram") if isinstance(body, dict) else None
+    if not isinstance(diagram, dict):
+        raise HTTPException(400, "缺少设计图数据")
+    raw = json.dumps(diagram, ensure_ascii=False)
+    if len(raw.encode("utf-8", "ignore")) > MAX_DIAGRAM_BYTES:
+        raise HTTPException(400, "设计图太大了，请减少模块数量")
+
+    w = _get_or_create_work(db, p, user)
+    w.diagram = raw
+    w.diagram_saved_at = datetime.utcnow()
+    db.commit()
+
+    code, warnings = build_skeleton(raw)
+    return JSONResponse({"ok": True, "skeleton": code, "warnings": warnings})
+
+
+@router.post("/projects/{pid}/run")
+async def run_project_code(pid: int, request: Request,
+                           user: User = Depends(student_dep),
+                           db: Session = Depends(get_db)):
+    """AI 模拟运行：浏览器加载不了 Pyodide 时的兜底方案。"""
+    _get_student_project(db, pid, user)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "代码数据格式不正确")
+    code = str(body.get("code", "")) if isinstance(body, dict) else ""
+    raw_inputs = body.get("inputs", []) if isinstance(body, dict) else []
+    inputs = [str(x) for x in raw_inputs] if isinstance(raw_inputs, list) else []
+    if not code.strip():
+        raise HTTPException(400, "代码不能为空")
+    if len(code.encode("utf-8", "ignore")) > MAX_CODE_BYTES:
+        raise HTTPException(400, "代码超过 200KB")
+    result = await run_in_threadpool(ai.simulate_run, code, inputs)
+    return JSONResponse(result)
+
+
+@router.post("/projects/{pid}/code")
+async def save_project_code(pid: int,
+                            code: str = Form(""),
+                            user: User = Depends(student_dep),
+                            db: Session = Depends(get_db)):
+    p = _get_student_project(db, pid, user)
+    if not code.strip():
+        return Response(status_code=303,
+                        headers={"Location": f"/student/projects/{pid}?error=empty"})
+    if len(code.encode("utf-8", "ignore")) > MAX_CODE_BYTES:
+        raise HTTPException(400, "代码超过 200KB，请精简后提交")
+
+    w = _get_or_create_work(db, p, user)
+    w.code = code
+    w.submitted_at = datetime.utcnow()
+    db.commit()
+    return Response(status_code=303,
+                    headers={"Location": f"/student/projects/{pid}?saved=1"})

@@ -443,3 +443,51 @@ def score_group_submission(title: str, description: str, team_name: str,
                 "source": "ai"}
     except Exception:
         return _fallback_group_score(problem, content)
+
+
+# —— 在线运行（浏览器无法加载 Pyodide 时，用 AI 推测运行结果） ——
+
+_RUN_SYSTEM = """你是一个严谨的 Python 3 解释器，用来推测一段初学者代码的执行结果。
+请按 Python 3 的真实语义逐行推演，并遵守：
+1. output 只写程序真正会打印出来的内容（print 的结果，一行一行），不要写代码、解释或 Markdown。
+2. 如果程序会抛异常，ok=false，error 写错误类型和最后一行信息，例如
+   "TypeError: cannot unpack non-iterable NoneType object"。
+3. 如果程序会死循环，ok=false，error 写 "运行超时（可能是死循环）"。
+4. 如果代码调用了 input()，就按用户提供的「运行输入」依次读取，输入用完后继续执行会报
+   EOFError: 输入已用完；如果用户没有提供输入，error 写 "EOFError: 输入已用完：请在「运行输入」里每行填一个值"。
+5. 如果代码里没有任何输出也没有报错，ok=true，output 留空。
+6. 只输出 JSON：{"ok": true/false, "output": "...", "error": "..."}
+"""
+
+
+def simulate_run(code: str, inputs: list[str] | None = None) -> dict:
+    """让 DeepSeek 充当 Python 解释器，推测运行结果。返回 {ok, output, error, source}。"""
+    code = (code or "")[:8000]
+    inputs = [str(x)[:200] for x in (inputs or [])][:50]
+    if not settings.DEEPSEEK_API_KEY:
+        return {"ok": False, "output": "",
+                "error": "当前没有配置 DEEPSEEK_API_KEY，无法使用 AI 模拟运行。",
+                "source": "none"}
+    try:
+        client = _client()
+        inputs_text = ("\n".join(inputs) if inputs else "（用户没有提供任何输入）")
+        resp = client.chat.completions.create(
+            model=settings.DEEPSEEK_MODEL,
+            messages=[
+                {"role": "system", "content": _RUN_SYSTEM},
+                {"role": "user", "content":
+                    "运行输入（input() 依次读取这些值，每行一个）：\n" + inputs_text +
+                    "\n\n请推测下面代码的运行结果：\n```python\n" + code + "\n```"},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.1,
+            timeout=45,
+        )
+        data = json.loads(resp.choices[0].message.content or "{}")
+        return {"ok": bool(data.get("ok")),
+                "output": str(data.get("output", ""))[:4000],
+                "error": str(data.get("error", ""))[:1000],
+                "source": "ai"}
+    except Exception as exc:  # 网络/Key/解析失败都给出可读提示
+        return {"ok": False, "output": "",
+                "error": f"AI 模拟运行失败：{exc}", "source": "error"}

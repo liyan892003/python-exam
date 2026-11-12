@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}{{ project.title }}{% endblock %}
+{% block content %}
+<div class="mb-5">
+  <a href="/student/classes/{{ cls.id }}/projects" class="text-sm text-slate-400 hover:text-candy-400">← 返回实践项目</a>
+  <h1 class="text-3xl font-extrabold text-violet-600 mt-2">🧩 {{ project.title }}</h1>
+  <p class="text-slate-400 text-sm">{{ project.description or '先画模块设计图，再补全代码' }}</p>
+</div>
+
+{% if saved %}
+<div class="mb-4 px-5 py-3 rounded-2xl bg-green-50 border-2 border-green-200 text-green-600 font-bold text-sm">✅ 代码已保存并提交</div>
+{% endif %}
+{% if error == 'empty' %}
+<div class="mb-4 px-5 py-3 rounded-2xl bg-amber-50 border-2 border-amber-200 text-amber-700 font-bold text-sm">⚠️ 代码还是空的，先补全再提交吧</div>
+{% endif %}
+
+<!-- 第一步：画模块设计图 -->
+<div class="bg-white/85 rounded-4xl p-5 shadow-md mb-6">
+  <div class="flex items-start justify-between gap-3 flex-wrap mb-3">
+    <div>
+      <h2 class="text-xl font-extrabold text-violet-600">① {{ project.design_title }}</h2>
+      <p class="text-xs text-slate-400 mt-1 whitespace-pre-wrap">{{ project.design_desc or '把程序拆成几个函数：拖出模块、连线，并在线上写清传什么参数。' }}</p>
+    </div>
+    <span class="text-[11px] text-slate-400">拖动模块可移动 · 点模块可改名和参数</span>
+  </div>
+
+  <div data-module-canvas
+       data-diagram="{{ work.diagram|e }}"
+       data-save-url="/student/projects/{{ project.id }}/diagram">
+    <!-- 工具栏 -->
+    <div data-toolbar class="flex flex-wrap items-center gap-2 mb-3">
+      <button type="button" data-act="add-func"
+              class="px-4 py-2 rounded-2xl bg-violet-400 text-white text-sm font-bold shadow hover:bg-violet-500 transition">➕ 添加函数模块</button>
+      <button type="button" data-act="link"
+              class="px-4 py-2 rounded-2xl bg-violet-100 text-violet-600 text-sm font-bold hover:bg-violet-200 transition">🔗 连线模式：关</button>
+      <input type="text" data-link-label placeholder="传入参数（可留空，默认用目标参数）"
+             class="px-3 py-2 rounded-2xl border-2 border-violet-100 focus:border-violet-400 outline-none text-xs bg-white/90 w-64">
+      <button type="button" data-act="save"
+              class="px-4 py-2 rounded-2xl bg-sky-100 text-sky2-500 text-sm font-bold hover:bg-sky-200 transition">💾 保存设计图</button>
+      <span data-edge-count class="text-xs text-violet-400 font-bold"></span>
+      <span data-status class="text-xs text-slate-400"></span>
+    </div>
+    <!-- 快速连线：不习惯拖拽时，用下拉框也能建调用关系 -->
+    <div class="flex flex-wrap items-center gap-2 mb-3 text-xs">
+      <span class="text-slate-400 font-bold">快速连线：</span>
+      <select data-from-select class="px-2 py-1.5 rounded-xl border-2 border-violet-100 bg-white/90 outline-none"></select>
+      <span class="text-slate-400">→</span>
+      <select data-to-select class="px-2 py-1.5 rounded-xl border-2 border-violet-100 bg-white/90 outline-none"></select>
+      <input type="text" data-param-input placeholder="传入参数（可留空）"
+             class="px-2 py-1.5 rounded-xl border-2 border-violet-100 bg-white/90 outline-none w-40">
+      <button type="button" data-act="add-edge"
+              class="px-3 py-1.5 rounded-xl bg-violet-400 text-white font-bold hover:bg-violet-500 transition">➕ 连线</button>
+    </div>
+
+    <div class="grid lg:grid-cols-[1fr_250px] gap-3">
+      <div data-canvas class="relative w-full rounded-3xl bg-violet-50/40 border-4 border-violet-100 overflow-hidden" style="height:560px">
+        <svg data-svg class="absolute inset-0 w-full h-full pointer-events-none" style="z-index:1"></svg>
+        <div data-nodes class="absolute inset-0" style="z-index:2"></div>
+      </div>
+      <aside data-inspector class="bg-violet-50/50 rounded-3xl p-3 h-fit"></aside>
+    </div>
+    <p id="warnings" class="text-xs text-amber-600 mt-2"></p>
+  </div>
+</div>
+
+<!-- 第二步：补全代码 -->
+<div class="bg-white/85 rounded-4xl p-5 shadow-md" data-code-runner data-code-editor="code"
+     data-fallback-url="/student/projects/{{ project.id }}/run">
+  <h2 class="text-xl font-extrabold text-sky2-500 mb-1">② {{ project.code_title }}</h2>
+  <p class="text-xs text-slate-400 mb-3 whitespace-pre-wrap">{{ project.code_desc or '根据设计图生成函数骨架，然后补全每个函数体，运行通过后提交。' }}</p>
+
+  <form method="post" action="/student/projects/{{ project.id }}/code" id="code-form">
+    <textarea id="code" name="code" rows="20" spellcheck="false"
+              placeholder="# 先在上面画好模块图并保存，然后点下面的「根据设计图生成代码骨架」"
+              class="w-full bg-slate-900 text-slate-100 rounded-2xl p-4 text-xs leading-relaxed font-mono outline-none focus:ring-4 focus:ring-sky-200 transition">{{ work.code or '' }}</textarea>
+    <div class="flex flex-wrap items-center gap-2 mt-3">
+      <button type="button" id="gen-skeleton"
+              class="px-5 py-2.5 rounded-2xl bg-violet-100 text-violet-600 font-bold text-sm hover:bg-violet-200 transition">⚙️ 根据设计图生成代码骨架</button>
+      <button type="button" data-run-btn
+              class="px-5 py-2.5 rounded-2xl bg-teal-100 text-teal-600 font-bold text-sm hover:bg-teal-200 transition">▶ 运行看看</button>
+      <button type="submit"
+              class="px-6 py-2.5 rounded-2xl bg-candy-400 text-white font-bold text-sm shadow-lg hover:bg-candy-500 hover:scale-105 transition transform">💾 保存并提交代码</button>
+      <span data-run-status class="text-xs text-green-600 font-bold"></span>
+      {% if work.submitted_at %}
+      <span class="text-xs text-slate-400">上次提交：{{ work.submitted_at.strftime('%m-%d %H:%M') }}</span>
+      {% endif %}
+    </div>
+  </form>
+
+  <details class="mt-3">
+    <summary class="cursor-pointer text-[11px] text-slate-400 select-none">需要 input()？点这里填运行时的输入（每行一个）</summary>
+    <textarea data-run-input rows="3" spellcheck="false"
+              placeholder="每行填一个输入值，例如：&#10;0.6&#10;0.5&#10;1000"
+              class="mt-2 w-full bg-white rounded-2xl border-2 border-slate-200 p-3 text-xs font-mono outline-none focus:border-sky-400 transition"></textarea>
+  </details>
+
+  <div data-run-output class="hidden mt-3 rounded-2xl bg-slate-50 border-2 border-slate-200 p-4 text-xs leading-relaxed whitespace-pre-wrap font-mono max-h-64 overflow-auto"></div>
+
+  <p class="text-[11px] text-slate-400 mt-3">小提示：先生成骨架再写代码，函数名和参数就会和你画的图一致；改图之后可以再生成一次（会覆盖当前代码）。在线运行优先用浏览器里的 Python；若加载失败会自动让 AI 按 Python 语义推测结果（仅供教学参考）。代码里用 <code>input()</code> 时，把要输入的值按行填在上面即可。</p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/module_canvas.js?v=20261112"></script>
+<script src="/static/js/code_runner.js?v=20261112"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const wrap = document.querySelector("[data-module-canvas]");
+    const designer = wrap.designer;
+    const ta = document.getElementById("code");
+    const warn = document.getElementById("warnings");
+
+    function showWarnings(list) {
+      warn.textContent = (list && list.length) ? "⚠️ " + list.join("；") : "";
+    }
+
+    wrap.addEventListener("design-saved", function (e) {
+      const detail = e.detail || {};
+      showWarnings(detail.warnings);
+      // 代码区还是空的：自动填入骨架，省一次点击
+      if (detail.skeleton && !ta.value.trim()) {
+        ta.value = detail.skeleton;
+      }
+    });
+
+    document.getElementById("gen-skeleton").addEventListener("click", async function () {
+      if (ta.value.trim() && !confirm("生成骨架会覆盖当前代码，确定吗？")) return;
+      const data = await designer.saveNow(true);
+      if (!data) return;
+      ta.value = data.skeleton || "";
+      showWarnings(data.warnings);
+    });
+  });
+</script>
+{% endblock %}

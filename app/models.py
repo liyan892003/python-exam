@@ -453,6 +453,51 @@ class GroupShowcase(Base):
     team = relationship("GroupTeam")
 
 
+class PracticeProject(Base):
+    """实践项目：学生先在画布上画模块设计图，再补全自动生成的代码。
+
+    固定两个步骤（标题与要求可由教师自定义）：
+      第一步 design_*  —— 拖拽模块、连线、标注传递的参数
+      第二步 code_*    —— 根据设计图生成 def 骨架，学生补全函数体
+    """
+    __tablename__ = "practice_projects"
+    id = Column(Integer, primary_key=True)
+    class_id = Column(Integer, ForeignKey("classes.id", ondelete="CASCADE"),
+                      nullable=False, index=True)
+    teacher_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    title = Column(String(128), nullable=False)
+    description = Column(Text, default="")
+    design_title = Column(String(64), default="第一步：画模块设计图")
+    design_desc = Column(Text, default="")
+    code_title = Column(String(64), default="第二步：补全代码")
+    code_desc = Column(Text, default="")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    class_ = relationship("Class")
+    works = relationship("ProjectWork", back_populates="project",
+                         cascade="all, delete-orphan", order_by="ProjectWork.id")
+
+
+class ProjectWork(Base):
+    """学生在某个实践项目下的个人作品（每人一份）。"""
+    __tablename__ = "project_works"
+    __table_args__ = (UniqueConstraint("project_id", "student_id", name="uq_project_student"),)
+    id = Column(Integer, primary_key=True)
+    project_id = Column(Integer, ForeignKey("practice_projects.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    diagram = Column(Text, default="")            # 模块图 JSON
+    diagram_saved_at = Column(DateTime, nullable=True)
+    code = Column(Text, default="")
+    submitted_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    project = relationship("PracticeProject", back_populates="works")
+    student = relationship("User")
+
+
 # —— 排行榜查询辅助 ——
 def class_leaderboard(db, class_id: int):
     """返回该班级学生总分排行 [(rank, user_id, username, score, answered_count)]。

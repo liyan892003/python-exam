@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}{{ project.title }}{% endblock %}
+{% block content %}
+<div class="mb-6">
+  <a href="/teacher/classes/{{ cls.id }}/projects" class="text-sm text-slate-400 hover:text-candy-400">← 返回实践项目</a>
+  <div class="flex items-start justify-between gap-4 mt-2 flex-wrap">
+    <div>
+      <h1 class="text-3xl font-extrabold text-violet-600">🧩 {{ project.title }}</h1>
+      <p class="text-slate-400 text-sm">{{ cls.name }} · {{ project.description or '暂无项目说明' }}</p>
+    </div>
+    <form method="post" action="/teacher/projects/{{ project.id }}/delete"
+          onsubmit="return confirm('删除这个实践项目？学生的设计图与代码会一起删除。');">
+      <button class="px-3 py-2 rounded-2xl bg-red-50 text-red-400 text-sm font-bold hover:bg-red-100 transition">🗑️ 删除项目</button>
+    </form>
+  </div>
+</div>
+
+<div class="grid md:grid-cols-2 gap-4 mb-6">
+  <div class="bg-violet-50 rounded-4xl p-5 border-4 border-violet-100">
+    <div class="text-xs font-extrabold text-violet-500 mb-1">① {{ project.design_title }}</div>
+    <p class="text-sm text-slate-600 whitespace-pre-wrap">{{ project.design_desc or '学生在画布上拖拽模块、连线，并标注箭头传递的参数。' }}</p>
+  </div>
+  <div class="bg-sky-50 rounded-4xl p-5 border-4 border-sky-100">
+    <div class="text-xs font-extrabold text-sky2-500 mb-1">② {{ project.code_title }}</div>
+    <p class="text-sm text-slate-600 whitespace-pre-wrap">{{ project.code_desc or '系统根据设计图生成函数骨架，学生补全每个函数体。' }}</p>
+  </div>
+</div>
+
+<div class="grid grid-cols-3 gap-3 mb-6">
+  <div class="bg-white/85 rounded-2xl p-3 text-center shadow-sm">
+    <div class="text-2xl font-extrabold text-slate-600">{{ rows|length }}</div>
+    <div class="text-[11px] text-slate-400">班级学生</div>
+  </div>
+  <div class="bg-white/85 rounded-2xl p-3 text-center shadow-sm">
+    <div class="text-2xl font-extrabold text-violet-500">{{ n_design }}</div>
+    <div class="text-[11px] text-slate-400">已画设计图</div>
+  </div>
+  <div class="bg-white/85 rounded-2xl p-3 text-center shadow-sm">
+    <div class="text-2xl font-extrabold text-green-500">{{ n_code }}</div>
+    <div class="text-[11px] text-slate-400">已提交代码</div>
+  </div>
+</div>
+
+<h2 class="text-xl font-extrabold text-slate-600 mb-3">👥 学生进度</h2>
+{% if rows %}
+<div class="space-y-2">
+  {% for r in rows %}
+  <div class="bg-white/85 rounded-3xl px-5 py-3 shadow-sm flex items-center justify-between gap-3 flex-wrap">
+    <div class="min-w-0">
+      <div class="font-extrabold text-slate-700">{{ r.student.username }}</div>
+      <div class="text-[11px] text-slate-400 font-mono">{{ r.student.email }}</div>
+    </div>
+    <div class="flex items-center gap-2 flex-wrap">
+      {% if r.work and r.work.diagram %}
+      <span class="px-2 py-0.5 rounded-full bg-violet-100 text-violet-600 text-[11px] font-bold">✓ 已画设计图</span>
+      {% else %}
+      <span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-400 text-[11px] font-bold">未画图</span>
+      {% endif %}
+      {% if r.work and r.work.submitted_at %}
+      <span class="px-2 py-0.5 rounded-full bg-green-100 text-green-600 text-[11px] font-bold">✓ 已提交代码</span>
+      {% else %}
+      <span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-400 text-[11px] font-bold">未提交代码</span>
+      {% endif %}
+      {% if r.work %}
+      <a href="/teacher/projects/{{ project.id }}/works/{{ r.work.id }}"
+         class="px-3 py-1.5 rounded-xl bg-violet-100 text-violet-600 text-xs font-bold hover:bg-violet-200 transition">查看作品 →</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-10 bg-white/60 rounded-4xl">
+  <div class="text-4xl mb-2">👥</div>
+  <p class="text-slate-400 text-sm">班里还没有学生加入</p>
+</div>
+{% endif %}
+{% endblock %}
