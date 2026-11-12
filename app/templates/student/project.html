@@ -98,11 +98,28 @@
 
   <p class="text-[11px] text-slate-400 mt-3">小提示：先生成骨架再写代码，函数名和参数就会和你画的图一致；改图之后可以再生成一次（会覆盖当前代码）。在线运行优先用浏览器里的 Python；若加载失败会自动让 AI 按 Python 语义推测结果（仅供教学参考）。代码里用 <code>input()</code> 时，把要输入的值按行填在上面即可。</p>
 </div>
+
+<!-- 代码原创性检测（AI 率）+ 超纲答辩 -->
+<div class="bg-white/85 rounded-4xl p-5 shadow-md mt-6" data-ai-check
+     data-check-url="/student/projects/{{ project.id }}/ai-check"
+     data-defense-url="/student/projects/{{ project.id }}/defense"
+     data-submitted="{{ '1' if work.submitted_at else '0' }}"
+     data-check='{{ (check|tojson) if check else "" }}'>
+  <div class="flex items-center justify-between gap-3 flex-wrap">
+    <h2 class="text-xl font-extrabold text-rose-500">🔍 代码原创性检测（AI 率）</h2>
+    <span data-check-status class="text-xs text-slate-400"></span>
+  </div>
+  <p class="text-xs text-slate-400 mt-1">提交代码后自动检测：这份代码有多像 AI 生成的、有没有用到课堂还没讲的内容。
+    一旦发现疑点，需要用<strong class="text-slate-500">你自己的话</strong>解释相关代码——讲得清就算懂，讲不清老师会单独找你。</p>
+  <div data-check-body class="hidden mt-4"></div>
+  <div data-check-empty class="mt-4 text-xs text-slate-400">提交代码后，这里会自动出检测结果。</div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script src="/static/js/module_canvas.js?v=20261112"></script>
 <script src="/static/js/code_runner.js?v=20261112"></script>
+<script src="/static/js/ai_check.js?v=20261112"></script>
 <script>
   document.addEventListener("DOMContentLoaded", function () {
     const wrap = document.querySelector("[data-module-canvas]");

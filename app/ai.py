@@ -491,3 +491,229 @@ def simulate_run(code: str, inputs: list[str] | None = None) -> dict:
     except Exception as exc:  # 网络/Key/解析失败都给出可读提示
         return {"ok": False, "output": "",
                 "error": f"AI 模拟运行失败：{exc}", "source": "error"}
+
+
+# —— 代码原创性（AI 率）检测 + 超纲答辩 ——
+
+_ORIGIN_SYSTEM = f"""你是高校《Python 程序设计》课程的助教。学生刚提交了实践项目的代码，
+需要你判断这份代码有多可能是「直接由 AI 生成、学生只做了很少改动」，并找出超出课堂已学范围的写法。
+
+本课程已学范围：{SYLLABUS_SCOPE}
+尚未学习：{OUT_OF_SCOPE}
+
+判断 ai_rate（0-100，只是"疑似程度"，不是定论）时综合看：
+1. 风格：命名、注释语言、缩进、变量名抽象程度是否像初学者；
+2. 超纲：是否出现未学语法（字典/集合/元组/自定义类/lambda/推导式/try-except/类型注解等）；
+3. 过于完整：docstring、`if __name__ == "__main__"`、异常处理、类型注解、防御性代码等初学者一般不写的痕迹；
+4. 与设计图是否一致（若提供了函数名列表，代码若另起炉灶也是信号）。
+
+依据要求：
+- signals 必须是代码里的具体现象，能让人对照核查，不要空泛。
+- out_of_scope 里 snippet 必须是代码原文片段（可截断），concept 写语法名，why 一句话说明为什么超纲。
+
+答辩题（questions）要求：
+- 只在 ai_rate >= 60 或有超纲写法时出题，共 1~3 道；否则给空数组。
+- 针对具体代码行提问，让学生用自己的话讲清"这行在干什么、不写会怎样、改一下会怎样"，例如
+  「第 12 行 result.append(x) 里的 append 做了什么？如果删掉这一行程序会怎样？」
+- 禁止问"这是不是你自己写的""你用了什么AI"之类无法判断的问题。
+- 题目要能区分真懂和背答案：必须指向代码里的具体变量/数据变化。
+
+只输出严格 JSON，不要任何额外文字：
+{{"ai_rate": 72, "summary": "一句话结论（<=50字）",
+  "signals": ["具体现象1", "具体现象2"],
+  "out_of_scope": [{{"snippet": "代码片段", "concept": "字典", "why": "课程还没学"}}],
+  "questions": [{{"snippet": "第12行 result.append(x)", "question": "..."}}]}}"""
+
+
+def _fallback_origin_check(code: str) -> dict:
+    """无 API 时的规则检测：只看可核实的痕迹，不下结论。"""
+    import re
+    text = code or ""
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    signals: list[str] = []
+    score = 25
+    out_of_scope: list[dict] = []
+
+    def hit(pattern: str, concept: str, why: str, weight: int, flags=0):
+        nonlocal score
+        m = re.search(pattern, text, flags)
+        if m:
+            snippet = m.group(0).strip()[:80]
+            out_of_scope.append({"snippet": snippet, "concept": concept, "why": why})
+            score += weight
+
+    hit(r"\{[^{}\n]*:[^{}\n]*\}", "字典", "课程还没学字典这种键值结构", 12)
+    hit(r"\bset\s*\(|\{[^:{}\n]+\}", "集合", "课程还没学集合", 10)
+    hit(r"\btuple\s*\(|\blambda\b", "lambda/tuple", "课程还没学 lambda 与元组", 8)
+    hit(r"^\s*class\s+\w+", "自定义类", "课程还没学面向对象的类", 15, re.M)
+    hit(r"\btry\s*:", "try-except", "初学阶段通常不写异常处理", 10)
+    hit(r"if\s+__name__\s*==", "main 保护", "初学阶段通常不写 main 保护", 8)
+    hit(r"\[[^\]\n]*\bfor\b[^\]\n]*\]", "列表推导式", "课程还没学推导式", 10)
+    hit(r"def\s+\w+\([^)]*:\s*\w+", "类型注解", "初学阶段通常不写类型注解", 8)
+
+    if any(ln.strip().startswith('"""') or ln.strip().startswith("'''") for ln in lines):
+        signals.append("使用了文档字符串 docstring，初学者较少写")
+        score += 8
+    if len(lines) > 80:
+        signals.append(f"代码共 {len(lines)} 行，明显超出课堂练习篇幅")
+        score += 10
+    n_comment = sum(1 for ln in lines if ln.strip().startswith("#"))
+    if lines and n_comment / len(lines) > 0.25:
+        signals.append(f"注释占比 {n_comment}/{len(lines)}，且格式工整，像生成结果")
+        score += 6
+    if not signals and not out_of_scope:
+        signals.append("未发现明显超纲或模板化痕迹")
+
+    score = max(5, min(score, 90))
+    questions = [
+        {"snippet": item["snippet"],
+         "question": f"你在代码里用了「{item['concept']}」（{item['snippet']}）。"
+                     "请用你自己的话说明：它在这一步存了什么/做了什么？如果换成列表或循环会怎样？"}
+        for item in out_of_scope[:2]
+    ]
+    if not questions and score >= 60:
+        questions = [{"snippet": "main() 里的调用顺序",
+                      "question": "请按顺序讲讲 main() 里每一行在做什么，变量在每一步分别变成了什么？"}]
+    return {"ai_rate": score,
+            "summary": "未接入 AI，按代码特征粗略估计（仅供参考），建议老师人工抽查。",
+            "signals": signals, "out_of_scope": out_of_scope,
+            "questions": questions, "source": "fallback"}
+
+
+def _as_text_list(value, limit: int = 6, max_len: int = 120) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    out = []
+    for item in value[:limit]:
+        s = str(item).strip()
+        if s:
+            out.append(s[:max_len])
+    return out
+
+
+def assess_code_origin(code: str, diagram_names: list[str] | None = None) -> dict:
+    """评估代码的「AI 参与度」并生成答辩题。
+
+    返回 {ai_rate, summary, signals, out_of_scope, questions, source}；
+    任何异常都降级为规则检测，保证提交流程不中断。
+    """
+    code = (code or "")[:8000]
+    names = [str(n)[:40] for n in (diagram_names or []) if str(n).strip()][:30]
+    if not settings.DEEPSEEK_API_KEY:
+        return _fallback_origin_check(code)
+    names_text = "、".join(names) if names else "（未提供）"
+    user_prompt = (f"学生在设计图里定义的函数：{names_text}\n\n"
+                   f"【学生提交的代码】\n```python\n{code}\n```\n\n请按要求输出 JSON。")
+    try:
+        client = _client()
+        resp = client.chat.completions.create(
+            model=settings.DEEPSEEK_MODEL,
+            messages=[{"role": "system", "content": _ORIGIN_SYSTEM},
+                      {"role": "user", "content": user_prompt}],
+            response_format={"type": "json_object"},
+            temperature=0.2,
+            timeout=45,
+        )
+        data = json.loads(resp.choices[0].message.content or "{}")
+        rate = int(data.get("ai_rate"))
+        if not (0 <= rate <= 100):
+            raise ValueError("ai_rate 越界")
+        signals = _as_text_list(data.get("signals"), 6, 120)
+        out_of_scope = []
+        for item in (data.get("out_of_scope") or [])[:4]:
+            if not isinstance(item, dict):
+                continue
+            snippet = str(item.get("snippet", "")).strip()[:160]
+            concept = str(item.get("concept", "")).strip()[:20]
+            why = str(item.get("why", "")).strip()[:80]
+            if snippet or concept:
+                out_of_scope.append({"snippet": snippet, "concept": concept, "why": why})
+        questions = []
+        for i, item in enumerate((data.get("questions") or [])[:3], 1):
+            if not isinstance(item, dict):
+                continue
+            q = str(item.get("question", "")).strip()[:200]
+            if q:
+                questions.append({"id": f"q{i}",
+                                  "snippet": str(item.get("snippet", "")).strip()[:120],
+                                  "question": q})
+        return {"ai_rate": rate,
+                "summary": str(data.get("summary", "")).strip()[:100],
+                "signals": signals, "out_of_scope": out_of_scope,
+                "questions": questions, "source": "ai"}
+    except Exception:
+        return _fallback_origin_check(code)
+
+
+_DEFENSE_SYSTEM = """你是严格的 Python 课程助教。学生在「代码答辩」中解释自己代码里的几处写法，
+请判断他是真正理解，还是只会背概念/照搬现成答案。
+
+判定规则：
+1. 必须结合代码里的具体变量、执行顺序、数据变化来回答；只讲抽象概念、与这段代码无关、
+   明显是通用套话的，判为不懂。
+2. 答非所问、回避问题、含糊其辞（如"就是一种数据结构""用来存储数据的"）判为不懂。
+3. 能用大白话讲清"它是干什么的、不写会怎样、改了会怎样"的，即使术语不准确也算懂。
+4. 不要因为口语化、错别字扣分；也不要因为答案很长就给高分。
+
+输出严格 JSON，不要任何额外文字：
+{{"understanding": 0-100, "verdict": "真懂|半懂|没懂",
+  "comment": "<=120字，指出答得好的地方和含糊的地方",
+  "per_question": [{{"index": 1, "ok": true, "comment": "<=50字"}}]}}"""
+
+
+def grade_defense(code: str, questions: list[dict], answers: list[dict]) -> dict:
+    """批改学生答辩：返回 {understanding, verdict, comment, per_question, source}。
+
+    questions: [{id, snippet, question}]；answers: [{id, answer}]。
+    """
+    code = (code or "")[:8000]
+    pairs = []
+    for i, q in enumerate(questions[:3], 1):
+        ans = next((a for a in answers if str(a.get("id")) == str(q.get("id"))), None)
+        pairs.append({"index": i, "snippet": q.get("snippet", ""),
+                      "question": q.get("question", ""),
+                      "answer": (ans or {}).get("answer", "")})
+    if not any(p["answer"].strip() for p in pairs):
+        return {"understanding": 0, "verdict": "没懂",
+                "comment": "没有作答，无法判断是否理解。", "per_question": [],
+                "source": "none"}
+    if not settings.DEEPSEEK_API_KEY:
+        return {"understanding": 0, "verdict": "未判定",
+                "comment": "未接入 AI，无法自动批改答辩，请老师课上当面抽查。",
+                "per_question": [], "source": "fallback"}
+
+    lines = ["【学生代码】", "```python", code, "```", "", "【答辩记录】"]
+    for p in pairs:
+        lines.append(f"{p['index']}. 代码处：{p['snippet']}\n   问题：{p['question']}\n"
+                     f"   学生回答：{p['answer'].strip()[:600] or '（未作答）'}")
+    try:
+        client = _client()
+        resp = client.chat.completions.create(
+            model=settings.DEEPSEEK_MODEL,
+            messages=[{"role": "system", "content": _DEFENSE_SYSTEM},
+                      {"role": "user", "content": "\n".join(lines) + "\n\n请输出 JSON。"}],
+            response_format={"type": "json_object"},
+            temperature=0.2,
+            timeout=45,
+        )
+        data = json.loads(resp.choices[0].message.content or "{}")
+        score = int(data.get("understanding"))
+        if not (0 <= score <= 100):
+            raise ValueError("understanding 越界")
+        verdict = str(data.get("verdict", "")).strip()
+        if verdict not in ("真懂", "半懂", "没懂"):
+            verdict = "半懂" if score >= 50 else "没懂"
+        per_question = []
+        for item in (data.get("per_question") or [])[:3]:
+            if not isinstance(item, dict):
+                continue
+            per_question.append({"index": int(item.get("index", 0) or 0),
+                                 "ok": bool(item.get("ok")),
+                                 "comment": str(item.get("comment", "")).strip()[:80]})
+        return {"understanding": score, "verdict": verdict,
+                "comment": str(data.get("comment", "")).strip()[:200],
+                "per_question": per_question, "source": "ai"}
+    except Exception as exc:
+        return {"understanding": 0, "verdict": "未判定",
+                "comment": f"AI 批改失败（{exc}），请老师课上当面抽查。",
+                "per_question": [], "source": "error"}

@@ -61,6 +61,18 @@
       {% else %}
       <span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-400 text-[11px] font-bold">未提交代码</span>
       {% endif %}
+      {% if r.work and r.work.ai_check %}
+        {% set ac = r.work.ai_check %}
+        <span class="px-2 py-0.5 rounded-full text-[11px] font-bold
+          {{ 'bg-red-100 text-red-600' if ac.ai_rate >= 70 else ('bg-amber-100 text-amber-700' if ac.ai_rate >= 45 else 'bg-green-100 text-green-600') }}">
+          AI 率 {{ ac.ai_rate }}%
+        </span>
+        {% if ac.answered_at %}
+        <span class="px-2 py-0.5 rounded-full bg-teal-100 text-teal-600 text-[11px] font-bold">✓ 已答辩 {{ ac.understanding or 0 }}%</span>
+        {% elif ac.questions %}
+        <span class="px-2 py-0.5 rounded-full bg-rose-100 text-rose-500 text-[11px] font-bold">⚠️ 待答辩</span>
+        {% endif %}
+      {% endif %}
       {% if r.work %}
       <a href="/teacher/projects/{{ project.id }}/works/{{ r.work.id }}"
          class="px-3 py-1.5 rounded-xl bg-violet-100 text-violet-600 text-xs font-bold hover:bg-violet-200 transition">查看作品 →</a>

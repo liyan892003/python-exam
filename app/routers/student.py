@@ -19,7 +19,7 @@ from ..deps import templates, require_role
 from ..models import (User, Class, Enrollment, ProblemSet, Question, Choice, Answer,
                       Role, GameSession, GameStatus, GamePlayer, GameGuess,
                       GroupTask, GroupTeam, GroupMember, GroupSubmission, GroupShowcase,
-                      PracticeProject, ProjectWork)
+                      PracticeProject, ProjectWork, ProjectAICheck)
 from ..achievements import evaluate_achievements
 from .. import number_guess, ai
 from ..project_design import build_skeleton
@@ -639,6 +639,48 @@ def _get_or_create_work(db: Session, project: PracticeProject,
     return w
 
 
+def _safe_json(raw: str, default):
+    """解析数据库里的 JSON 文本，失败时返回 default（同类型）。"""
+    try:
+        value = json.loads(raw or "")
+    except Exception:
+        return default
+    return value if isinstance(value, type(default)) else default
+
+
+def _diagram_func_names(raw: str) -> list[str]:
+    """取出设计图里学生自己定义的函数名（不含 main），供 AI 对照代码。"""
+    data = _safe_json(raw, {})
+    names = []
+    for node in (data.get("nodes") or []):
+        if not isinstance(node, dict) or node.get("kind") == "main":
+            continue
+        name = str(node.get("name") or "").strip()
+        if name:
+            names.append(name)
+    return names
+
+
+def _check_view(check: ProjectAICheck | None) -> dict | None:
+    """把检测记录整理成模板/前端好用的结构。"""
+    if not check:
+        return None
+    report = _safe_json(check.report, {})
+    return {
+        "ai_rate": check.ai_rate or 0,
+        "summary": report.get("summary", ""),
+        "signals": report.get("signals") or [],
+        "out_of_scope": report.get("out_of_scope") or [],
+        "questions": _safe_json(check.questions, []),
+        "answers": _safe_json(check.answers, []),
+        "understanding": check.understanding,
+        "defense": _safe_json(check.defense_report, {}),
+        "paste_count": check.paste_count or 0,
+        "checked_at": check.checked_at.strftime("%m-%d %H:%M") if check.checked_at else "",
+        "answered_at": check.answered_at.strftime("%m-%d %H:%M") if check.answered_at else "",
+    }
+
+
 @router.get("/classes/{cid}/projects")
 async def student_projects(cid: int, request: Request,
                            user: User = Depends(student_dep),
@@ -666,6 +708,7 @@ async def student_project(pid: int, request: Request,
     w = _get_or_create_work(db, p, user)
     return templates.TemplateResponse(request, "student/project.html", {
         "user": user, "cls": p.class_, "project": p, "work": w,
+        "check": _check_view(w.ai_check),
         "saved": request.query_params.get("saved") == "1",
         "error": request.query_params.get("error")})
 
@@ -731,6 +774,101 @@ async def save_project_code(pid: int,
     w = _get_or_create_work(db, p, user)
     w.code = code
     w.submitted_at = datetime.utcnow()
+    # 代码改了，旧的原创性检测与答辩记录作废，页面会重新自动检测
+    if w.ai_check:
+        db.delete(w.ai_check)
+        db.flush()
     db.commit()
     return Response(status_code=303,
                     headers={"Location": f"/student/projects/{pid}?saved=1"})
+
+
+@router.post("/projects/{pid}/ai-check")
+async def project_ai_check(pid: int,
+                           user: User = Depends(student_dep),
+                           db: Session = Depends(get_db)):
+    """检测规模：AI 参与度 + 超纲写法 + 答辩题（提交代码后页面自动调用）。"""
+    p = _get_student_project(db, pid, user)
+    w = _get_or_create_work(db, p, user)
+    code = (w.code or "").strip()
+    if not code:
+        raise HTTPException(400, "先保存并提交代码，再做原创性检测")
+    if len(code.encode("utf-8", "ignore")) > MAX_CODE_BYTES:
+        raise HTTPException(400, "代码超过 200KB")
+
+    names = _diagram_func_names(w.diagram)
+    result = await run_in_threadpool(ai.assess_code_origin, code, names)
+
+    check = w.ai_check
+    if not check:
+        check = ProjectAICheck(work_id=w.id)
+        db.add(check)
+    check.ai_rate = int(result.get("ai_rate") or 0)
+    check.report = json.dumps({
+        "summary": result.get("summary", ""),
+        "signals": result.get("signals", []),
+        "out_of_scope": result.get("out_of_scope", []),
+    }, ensure_ascii=False)
+    check.questions = json.dumps(result.get("questions", []), ensure_ascii=False)
+    # 重新检测＝重新答辩
+    check.answers = ""
+    check.understanding = None
+    check.defense_report = ""
+    check.answered_at = None
+    check.checked_at = datetime.utcnow()
+    db.commit()
+    db.refresh(check)
+
+    view = _check_view(check)
+    view["source"] = result.get("source", "ai")
+    view["need_defense"] = bool(view["questions"]) and not view["answered_at"]
+    return JSONResponse(view)
+
+
+@router.post("/projects/{pid}/defense")
+async def submit_project_defense(pid: int, request: Request,
+                                 user: User = Depends(student_dep),
+                                 db: Session = Depends(get_db)):
+    """提交答辩：AI 判断是否真正理解（不只看对错，还要看是否结合代码细节）。"""
+    p = _get_student_project(db, pid, user)
+    w = _get_or_create_work(db, p, user)
+    check = w.ai_check
+    if not check or not (check.questions or "").strip():
+        raise HTTPException(400, "当前没有需要答辩的题目")
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "答辩数据格式不正确")
+    body = body if isinstance(body, dict) else {}
+
+    questions = _safe_json(check.questions, [])
+    raw_answers = body.get("answers") or []
+    answers = []
+    for item in raw_answers[:3] if isinstance(raw_answers, list) else []:
+        if not isinstance(item, dict):
+            continue
+        answers.append({"id": str(item.get("id", ""))[:16],
+                        "answer": str(item.get("answer", ""))[:2000]})
+    if not any(a["answer"].strip() for a in answers):
+        raise HTTPException(400, "请先用你自己的话作答，再提交")
+    try:
+        paste_count = int(body.get("paste_count") or 0)
+    except Exception:
+        paste_count = 0
+
+    result = await run_in_threadpool(ai.grade_defense, w.code, questions, answers)
+    check.answers = json.dumps(answers, ensure_ascii=False)
+    check.understanding = int(result.get("understanding") or 0)
+    check.defense_report = json.dumps({
+        "verdict": result.get("verdict", ""),
+        "comment": result.get("comment", ""),
+        "per_question": result.get("per_question", []),
+    }, ensure_ascii=False)
+    check.paste_count = max(check.paste_count or 0, min(paste_count, 999))
+    check.answered_at = datetime.utcnow()
+    db.commit()
+    db.refresh(check)
+
+    view = _check_view(check)
+    view["need_defense"] = False
+    return JSONResponse(view)

@@ -496,6 +496,27 @@ class ProjectWork(Base):
 
     project = relationship("PracticeProject", back_populates="works")
     student = relationship("User")
+    ai_check = relationship("ProjectAICheck", back_populates="work",
+                            cascade="all, delete-orphan", uselist=False)
+
+
+class ProjectAICheck(Base):
+    """学生代码的「AI 参与度」检测 + 超纲答辩记录（每人每作品一条）。"""
+    __tablename__ = "project_ai_checks"
+    id = Column(Integer, primary_key=True)
+    work_id = Column(Integer, ForeignKey("project_works.id", ondelete="CASCADE"),
+                     nullable=False, unique=True, index=True)
+    ai_rate = Column(Integer, default=0)              # 0-100 疑似 AI 参与度
+    report = Column(Text, default="")                 # JSON: summary/signals/out_of_scope
+    questions = Column(Text, default="")              # JSON: [{id, snippet, question}]
+    answers = Column(Text, default="")                # JSON: [{id, answer}]
+    understanding = Column(Integer, nullable=True)    # 0-100 答辩理解度
+    defense_report = Column(Text, default="")         # JSON: verdict/comment/per_question
+    paste_count = Column(Integer, default=0)          # 尝试粘贴次数（防抄证据）
+    checked_at = Column(DateTime, default=datetime.utcnow)
+    answered_at = Column(DateTime, nullable=True)
+
+    work = relationship("ProjectWork", back_populates="ai_check")
 
 
 # —— 排行榜查询辅助 ——

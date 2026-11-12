@@ -23,6 +23,7 @@ from ..models import (User, Class, ProblemSet, Question, Choice, Enrollment, Ans
                       GroupTask, GroupTeam, GroupMember, GroupSubmission, GroupShowcase,
                       PracticeProject, ProjectWork)
 from .. import number_guess
+from .student import _check_view
 
 router = APIRouter(prefix="/teacher", tags=["teacher"])
 teacher_dep = require_role(Role.teacher)
@@ -826,6 +827,7 @@ async def group_big_screen(tid: int, pos: int, request: Request,
 
 def _get_owned_project(db: Session, pid: int, user: User) -> PracticeProject:
     p = (db.query(PracticeProject)
+         .options(selectinload(PracticeProject.works).selectinload(ProjectWork.ai_check))
          .filter(PracticeProject.id == pid, PracticeProject.teacher_id == user.id).first())
     if not p:
         raise HTTPException(404, "实践项目不存在")
@@ -894,7 +896,6 @@ async def project_detail(pid: int, request: Request,
         "n_design": sum(1 for w in p.works if w.diagram),
         "n_code": sum(1 for w in p.works if w.submitted_at)})
 
-
 @router.post("/projects/{pid}/delete")
 async def delete_project(pid: int,
                          user: User = Depends(teacher_dep),
@@ -916,4 +917,5 @@ async def project_work_detail(pid: int, wid: int, request: Request,
     if not work:
         raise HTTPException(404, "作品不存在")
     return templates.TemplateResponse(request, "teacher/project_work.html", {
-        "user": user, "cls": p.class_, "project": p, "work": work})
+        "user": user, "cls": p.class_, "project": p, "work": work,
+        "check": _check_view(work.ai_check)})
