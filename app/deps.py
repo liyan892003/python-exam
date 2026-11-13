@@ -1,6 +1,10 @@
 """FastAPI 依赖：当前用户、角色拦截、模板渲染辅助。"""
+import html as _html
+import re
+
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.templating import Jinja2Templates
+from markupsafe import Markup
 from sqlalchemy.orm import Session
 
 from .config import get_settings
@@ -10,6 +14,50 @@ from .models import User, Role
 settings = get_settings()
 
 templates = Jinja2Templates(directory="app/templates")
+
+# ```python ... ``` 代码块（也接受 ``` 结尾没有语言名）
+_CODE_FENCE = re.compile(r"```[ \t]*([\w+#-]*)[ \t]*\n?(.*?)```", re.S)
+# 行内 `code`
+_INLINE_CODE = re.compile(r"`([^`\n]+)`")
+
+
+def _plain_html(text: str) -> str:
+    """普通文字：转义后保留换行与缩进，行内反引号显示成小代码。"""
+    esc = _html.escape(text)
+    esc = _INLINE_CODE.sub(
+        r'<code class="px-1.5 py-0.5 rounded-lg bg-slate-100 font-mono text-[0.9em]">\1</code>',
+        esc)
+    return '<span class="whitespace-pre-wrap break-words">' + esc + "</span>"
+
+
+def _code_html(code: str) -> str:
+    """标准代码块：深色底、等宽字体、横向可滚动、不折行。"""
+    return ('<span class="block my-2 overflow-x-auto rounded-2xl bg-slate-900 text-slate-100 '
+            'px-4 py-3 text-[13px] leading-relaxed font-mono whitespace-pre">'
+            + _html.escape(code.strip("\n")) + "</span>")
+
+
+def render_code_text(text) -> Markup:
+    """题干/解析渲染：保留换行和缩进，``` 围起来的部分显示为标准代码块。
+
+    只用 span（display:block 的代码块），因此放在 <p>/<h1> 里也是合法 HTML。
+    """
+    raw = "" if text is None else str(text)
+    if not raw:
+        return Markup("")
+    parts = []
+    pos = 0
+    for m in _CODE_FENCE.finditer(raw):
+        if m.start() > pos:
+            parts.append(_plain_html(raw[pos:m.start()]))
+        parts.append(_code_html(m.group(2)))
+        pos = m.end()
+    if pos < len(raw):
+        parts.append(_plain_html(raw[pos:]))
+    return Markup("".join(parts))
+
+
+templates.env.filters["codeblock"] = render_code_text
 
 
 def piece_path(left: str = "0", right: str = "0",

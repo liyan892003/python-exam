@@ -85,7 +85,7 @@
             <span class="text-xs font-bold px-2 py-0.5 rounded-full mr-1 {{ 'bg-candy-100 text-candy-500' if it.q.q_type.value == 'mc' else 'bg-sky-100 text-sky2-500' }}">
               {{ '选择' if it.q.q_type.value == 'mc' else '判断' }}
             </span>
-            {{ it.q.stem }}
+            {{ it.q.stem|codeblock }}
           </p>
           <a href="/student/classes/{{ cls.id }}/wrong-book/retry/{{ it.q.id }}"
              class="shrink-0 px-4 py-2 rounded-xl bg-candy-400 text-white text-sm font-bold hover:bg-candy-500 hover:scale-105 transition transform">
@@ -100,7 +100,7 @@
         </div>
         {% if it.q.explanation %}
         <div class="mt-2 text-xs text-slate-500 bg-yellow-50 rounded-xl p-2">
-          <span class="font-extrabold text-yellow-600">💡 </span>{{ it.q.explanation }}
+          <span class="font-extrabold text-yellow-600">💡 </span>{{ it.q.explanation|codeblock }}
         </div>
         {% endif %}
       </div>

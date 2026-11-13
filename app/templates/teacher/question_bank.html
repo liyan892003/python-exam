@@ -24,7 +24,7 @@
         <span class="text-xs text-slate-400">来自 <span class="font-bold text-slate-500">{{ r.from_class.name }}</span>{% if r.from_set %} / {{ r.from_set.name }}{% endif %}</span>
         {% endif %}
       </div>
-      <p class="font-bold text-slate-700 mb-2">{{ r.q.stem }}</p>
+      <p class="font-bold text-slate-700 mb-2">{{ r.q.stem|codeblock }}</p>
       <div class="text-sm text-slate-500 space-y-1">
         {% for c in r.q.choices %}
         <div class="{{ 'text-green-500 font-bold' if c.is_correct else '' }}">
@@ -33,7 +33,7 @@
         {% endfor %}
       </div>
       {% if r.q.explanation %}
-      <p class="mt-2 text-xs text-slate-400 italic">💡 {{ r.q.explanation }}</p>
+      <p class="mt-2 text-xs text-slate-400 italic">💡 {{ r.q.explanation|codeblock }}</p>
       {% endif %}
     </div>
     <form method="post" action="/teacher/classes/{{ cls.id }}/sets/{{ set.id }}/bank/{{ r.q.id }}/add"

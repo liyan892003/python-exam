@@ -40,7 +40,7 @@
         {% endfor %}
         <span class="text-xs text-slate-400">{{ q.points }} 分</span>
       </div>
-      <p class="font-bold text-slate-700">{{ loop.index }}. {{ q.stem }}</p>
+      <p class="font-bold text-slate-700">{{ loop.index }}. {{ q.stem|codeblock }}</p>
       <div class="mt-2 text-sm text-slate-500 space-y-1">
         {% for c in q.choices %}
         <div class="{{ 'text-green-500 font-bold' if c.is_correct else '' }}">

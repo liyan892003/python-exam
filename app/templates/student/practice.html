@@ -47,7 +47,7 @@
       </span>
       {% endif %}
     </div>
-    <h1 class="text-xl font-extrabold text-slate-700 mt-3 leading-relaxed">{{ q.stem }}</h1>
+    <h1 class="text-xl font-extrabold text-slate-700 mt-3 leading-relaxed">{{ q.stem|codeblock }}</h1>
 
     {% if not feedback %}
     <!-- 作答表单 -->
@@ -90,7 +90,7 @@
 
     {% if q.explanation %}
     <div class="mt-4 bg-yellow-50 rounded-2xl p-4 text-sm text-slate-600">
-      <span class="font-extrabold text-yellow-600">💡 解析：</span>{{ q.explanation }}
+      <span class="font-extrabold text-yellow-600">💡 解析：</span>{{ q.explanation|codeblock }}
     </div>
     {% endif %}
 

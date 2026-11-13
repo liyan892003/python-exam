@@ -25,7 +25,7 @@
         <span class="ml-auto text-xs font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-400">未作答</span>
       {% endif %}
     </div>
-    <p class="font-bold text-slate-700 mb-3 leading-relaxed">{{ loop.index }}. {{ it.q.stem }}</p>
+    <p class="font-bold text-slate-700 mb-3 leading-relaxed">{{ loop.index }}. {{ it.q.stem|codeblock }}</p>
     <div class="space-y-2 text-sm">
       {% for c in it.q.choices %}
       <div class="flex items-center gap-2 p-2 rounded-xl
@@ -43,7 +43,7 @@
     </div>
     {% if it.q.explanation %}
     <div class="mt-3 pt-3 border-t border-candy-100 text-sm text-slate-500 bg-candy-50/50 p-3 rounded-xl">
-      <span class="font-bold text-candy-500">💡 解析：</span>{{ it.q.explanation }}
+      <span class="font-bold text-candy-500">💡 解析：</span>{{ it.q.explanation|codeblock }}
     </div>
     {% endif %}
   </div>

@@ -24,7 +24,7 @@
       </span>
       <span class="text-xs text-slate-400">{{ q.points }} 分</span>
     </div>
-    <h1 class="text-2xl font-extrabold text-slate-700 mb-6 leading-relaxed">{{ q.stem }}</h1>
+    <h1 class="text-2xl font-extrabold text-slate-700 mb-6 leading-relaxed">{{ q.stem|codeblock }}</h1>
 
     <form method="post" action="/student/classes/{{ cls.id }}/questions/{{ q.id }}/answer" class="space-y-3" id="ansform">
       {% for c in q.choices %}

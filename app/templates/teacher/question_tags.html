@@ -10,7 +10,7 @@
       <span class="text-xs font-bold px-2 py-0.5 rounded-full {{ 'bg-candy-100 text-candy-500' if q.q_type.value == 'mc' else 'bg-sky-100 text-sky2-500' }}">
         {{ '选择题' if q.q_type.value == 'mc' else '判断题' }}
       </span>
-      <p class="font-bold text-slate-700 mt-2">{{ q.stem }}</p>
+      <p class="font-bold text-slate-700 mt-2">{{ q.stem|codeblock }}</p>
     </div>
 
     {% if chapters %}
